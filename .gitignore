@@ -1,0 +1,49 @@
+# Model weights and exports. The checkpoints are 15GB and the exports are published
+# on Hugging Face, so neither belongs in git.
+checkpoints/
+dist/
+artifacts/
+*.pt
+*.safetensors
+
+# Tokenised corpora, rebuilt by download_pretrain_data.py
+*.bin
+transfer/
+data/
+
+# Chat history written by the server at runtime
+chats.db
+chats.db-*
+*.db.backup
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Editors and platforms
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Superseded notes and the first tokenizer, kept locally for reference only
+docs/archive/
+
+# Space and upload bundles, rebuilt from docs/ by their scripts
+dist/
+
+# Recovered and backed-up chat history: private conversation content
+docs/recovered_messages.json
+training/db/
+*.bak
+
+# Local wandb run directories, created by export_to_wandb.py
+wandb/
+
+# Editor and tooling configuration, not part of the project
+.claude/
+.vscode/
+.idea/
