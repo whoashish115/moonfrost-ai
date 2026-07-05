@@ -357,3 +357,38 @@ class SwiGLUFeedForward(nn.Module):
     def forward(self, hidden_states):
         gated = F.silu(self.gate_projection(hidden_states)) * self.up_projection(hidden_states)
         return self.dropout(self.down_projection(gated))
+
+
+LEGACY_EXPERT_PROJECTIONS = (
+    ("expert_gate_weights", "gate_projection"),
+    ("expert_up_weights", "up_projection"),
+    ("expert_down_weights", "down_projection"),
+)
+
+
+def stack_legacy_expert_weights(state_dict, prefix=""):
+    """Converts one MoE layer's routed experts, in place, from the older
+    layout (one SwiGLUFeedForward module per expert, keys like
+    'routed_experts.3.gate_projection.weight') to the stacked layout this
+    file now uses ('expert_gate_weights', with a leading expert dimension).
+    Returns how many experts were converted; 0 if already stacked."""
+    expert_count = 0
+    while f"{prefix}routed_experts.{expert_count}.gate_projection.weight" in state_dict:
+        expert_count += 1
+    if expert_count == 0:
+        return 0
+    for stacked_name, projection_name in LEGACY_EXPERT_PROJECTIONS:
+        keys = [f"{prefix}routed_experts.{index}.{projection_name}.weight" for index in range(expert_count)]
+        state_dict[prefix + stacked_name] = torch.stack([state_dict.pop(key) for key in keys])
+    return expert_count
+
+
+def convert_legacy_expert_keys(state_dict):
+    """Whole-model version of stack_legacy_expert_weights: returns a new dict
+    with every MoE layer in the stacked layout. Used by upcycle.py, which
+    edits expert tensors directly rather than through a live module."""
+    converted = dict(state_dict)
+    prefixes = sorted({key.split("routed_experts.")[0] for key in converted if ".routed_experts." in key})
+    for prefix in prefixes:
+        stack_legacy_expert_weights(converted, prefix)
+    return converted
