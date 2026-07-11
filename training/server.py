@@ -294,3 +294,132 @@ active_generations_lock = threading.Lock()
 @app.get("/")
 async def index():
     return FileResponse(os.path.join(STATIC_DIRECTORY, "index.html"))
+
+
+@app.get("/home")
+async def home():
+    """The project page. It lives in docs/ so the same file can be published as a site."""
+    return FileResponse(os.path.join(HERE, "..", "docs", "index.html"))
+
+
+@app.get("/api/status")
+async def api_status():
+    status = manager.status()
+    if torch.cuda.is_available():
+        status["vram_allocated_bytes"] = torch.cuda.memory_allocated()
+        status["vram_total_bytes"] = torch.cuda.get_device_properties(0).total_memory
+    return status
+
+
+@app.post("/api/sessions/archive_all")
+async def api_archive_all(workspace: str = "default"):
+    """Archives every active chat at once. Nothing is deleted, so this is reversible from
+    the archive view."""
+    with closing(open_database()) as connection:
+        cursor = connection.execute(
+            "UPDATE sessions SET archived = 1 WHERE archived = 0 AND workspace = ?", (workspace,))
+        connection.commit()
+    return {"ok": True, "archived": cursor.rowcount}
+
+
+@app.delete("/api/sessions")
+async def api_delete_all(archived_only: bool = False, workspace: str = "default"):
+    """Deletes chats permanently. archived_only empties the archive and leaves active
+    chats alone, which is the safer half of this and worth having separately."""
+    with closing(open_database()) as connection:
+        if archived_only:
+            rows = connection.execute(
+                "SELECT id FROM sessions WHERE archived = 1 AND workspace = ?", (workspace,)).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT id FROM sessions WHERE workspace = ?", (workspace,)).fetchall()
+        ids = [row["id"] for row in rows]
+        for session_id in ids:
+            connection.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        connection.commit()
+    return {"ok": True, "deleted": len(ids)}
+
+
+@app.get("/api/sessions/export")
+async def api_export_sessions():
+    """Every chat and message as one JSON document, for keeping or moving elsewhere."""
+    with closing(open_database()) as connection:
+        sessions = [dict(row) for row in connection.execute(
+            "SELECT id, title, created_at, updated_at, archived FROM sessions ORDER BY created_at")]
+        for session in sessions:
+            session["messages"] = [dict(row) for row in connection.execute(
+                """SELECT role, content, timestamp, model, token_count, tokens_per_second
+                   FROM messages WHERE session_id = ? ORDER BY id""", (session["id"],))]
+    return {"exported_at": now_iso(), "chats": len(sessions),
+            "messages": sum(len(s["messages"]) for s in sessions), "sessions": sessions}
+
+
+@app.get("/api/stats")
+async def api_stats(workspace: str = "default"):
+    """Counts for the data screen, so it can say what it is about to act on."""
+    with closing(open_database()) as connection:
+        row = connection.execute(
+            """SELECT (SELECT COUNT(*) FROM sessions WHERE archived = 0 AND workspace = ?) AS active,
+                      (SELECT COUNT(*) FROM sessions WHERE archived = 1 AND workspace = ?) AS archived,
+                      (SELECT COUNT(*) FROM messages m JOIN sessions s ON s.id = m.session_id
+                       WHERE s.workspace = ?) AS messages""",
+            (workspace, workspace, workspace)).fetchone()
+    return dict(row)
+
+
+@app.get("/api/workspaces")
+async def api_workspaces():
+    """Which workspaces exist, and how much is in each. A workspace is just a label on a
+    chat: separate lists that share one model and one database, which is all that is
+    needed to keep unrelated conversations apart."""
+    with closing(open_database()) as connection:
+        rows = connection.execute(
+            """SELECT workspace AS name, COUNT(*) AS chats,
+                      SUM(CASE WHEN archived = 1 THEN 1 ELSE 0 END) AS archived
+               FROM sessions GROUP BY workspace ORDER BY workspace""").fetchall()
+    found = [dict(row) for row in rows]
+    if not any(entry["name"] == "default" for entry in found):
+        found.insert(0, {"name": "default", "chats": 0, "archived": 0})
+    return {"workspaces": found}
+
+
+@app.get("/api/models")
+async def api_models():
+    entries = checkpoint_utils.list_checkpoints(CHECKPOINT_DIRECTORY)
+    return {"models": entries, "current": manager.checkpoint_name}
+
+
+@app.post("/api/load_model")
+async def api_load_model(request: LoadModelRequest):
+    # loading a multi-gigabyte checkpoint takes seconds to minutes; keep it off the event loop
+    ok = await asyncio.to_thread(manager.load, request.model_name)
+    if not ok:
+        return JSONResponse({"status": "error", "message": manager.load_error}, status_code=400)
+    return {"status": "success", "model": request.model_name, "info": manager.status()}
+
+
+@app.get("/api/sessions")
+async def api_sessions(archived: bool = False, workspace: str = "default"):
+    """Archived chats are hidden from the list rather than deleted, so a conversation can
+    be put away without losing it."""
+    with closing(open_database()) as connection:
+        rows = connection.execute(
+            # Newest first by creation, not by last reply: sorting on updated_at made an
+            # old conversation jump over a newer one the moment you answered in it, so the
+            # list reordered itself under the pointer.
+            """SELECT s.id, s.title, s.created_at, s.updated_at, s.archived, s.pinned,
+                      (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+               FROM sessions s WHERE s.archived = ? AND s.workspace = ?
+               ORDER BY s.pinned DESC, s.created_at DESC""",
+            (1 if archived else 0, workspace)
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+class ArchiveRequest(BaseModel):
+    archived: bool = True
+
+
+class PinRequest(BaseModel):
+    pinned: bool = True
