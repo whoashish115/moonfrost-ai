@@ -423,3 +423,328 @@ class ArchiveRequest(BaseModel):
 
 class PinRequest(BaseModel):
     pinned: bool = True
+
+
+@app.post("/api/sessions/{session_id}/pin")
+async def api_pin_session(session_id: str, request: PinRequest):
+    """Pinned chats sort to the top of their space. It is only an ordering flag, so a
+    pinned chat behaves like any other in every other respect."""
+    with closing(open_database()) as connection:
+        cursor = connection.execute("UPDATE sessions SET pinned = ? WHERE id = ?",
+                                    (1 if request.pinned else 0, session_id))
+        connection.commit()
+    if not cursor.rowcount:
+        raise HTTPException(status_code=404, detail="no such chat")
+    return {"ok": True, "pinned": request.pinned}
+
+
+@app.post("/api/sessions/{session_id}/archive")
+async def api_archive_session(session_id: str, request: ArchiveRequest):
+    with closing(open_database()) as connection:
+        cursor = connection.execute("UPDATE sessions SET archived = ? WHERE id = ?",
+                                    (1 if request.archived else 0, session_id))
+        connection.commit()
+    if not cursor.rowcount:
+        raise HTTPException(status_code=404, detail="no such chat")
+    return {"ok": True, "archived": request.archived}
+
+
+@app.post("/api/sessions")
+async def api_create_session(workspace: str = "default"):
+    session_id = str(uuid.uuid4())
+    timestamp = now_iso()
+    with closing(open_database()) as connection:
+        connection.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, workspace) VALUES (?, ?, ?, ?, ?)",
+            (session_id, "New chat", timestamp, timestamp, workspace),
+        )
+        connection.commit()
+    return {"id": session_id, "title": "New chat", "created_at": timestamp, "updated_at": timestamp,
+            "message_count": 0}
+
+
+@app.get("/api/sessions/{session_id}")
+async def api_get_session(session_id: str):
+    with closing(open_database()) as connection:
+        session = connection.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if session is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        rows = connection.execute(
+            """SELECT id, role, content, timestamp, model, token_count, tokens_per_second
+               FROM messages WHERE session_id = ? ORDER BY id ASC""",
+            (session_id,),
+        ).fetchall()
+    return {"session": dict(session), "messages": [dict(row) for row in rows]}
+
+
+@app.patch("/api/sessions/{session_id}")
+async def api_rename_session(session_id: str, request: RenameRequest):
+    title = request.title.strip()[:120] or "New chat"
+    with closing(open_database()) as connection:
+        connection.execute("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
+                            (title, now_iso(), session_id))
+        connection.commit()
+    return {"status": "success", "title": title}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def api_delete_session(session_id: str):
+    with closing(open_database()) as connection:
+        connection.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        connection.commit()
+    return {"status": "success"}
+
+
+@app.delete("/api/messages/{message_id}")
+async def api_delete_message(message_id: int):
+    """Deletes a message and everything after it in the same session --
+    conversation history is a prefix, so keeping later turns after removing
+    an earlier one would leave the model reading a conversation that never
+    happened."""
+    with closing(open_database()) as connection:
+        row = connection.execute("SELECT session_id FROM messages WHERE id = ?", (message_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="message not found")
+        connection.execute("DELETE FROM messages WHERE session_id = ? AND id >= ?",
+                            (row["session_id"], message_id))
+        connection.commit()
+    return {"status": "success"}
+
+
+@app.post("/api/stop/{request_id}")
+async def api_stop(request_id: str):
+    with active_generations_lock:
+        event = active_generations.get(request_id)
+    if event is None:
+        return {"status": "not_found"}
+    event.set()
+    return {"status": "stopping"}
+
+
+def load_history(session_id: str) -> List[tuple]:
+    with closing(open_database()) as connection:
+        rows = connection.execute(
+            "SELECT role, content FROM messages WHERE session_id = ? ORDER BY id ASC", (session_id,)
+        ).fetchall()
+    return [(row["role"], row["content"]) for row in rows]
+
+
+def sse(event_name: str, payload: dict) -> str:
+    """One server-sent event. The payload is JSON, so newlines, quotes and
+    backslashes in model output survive the trip intact -- the previous
+    hand-rolled '\\n' escaping did not."""
+    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+async def stream_reply(session_id: str, user_message: Optional[str],
+                        system_prompt: Optional[str], settings: SamplingSettings,
+                        http_request: Request):
+    """Shared body of /api/chat and /api/regenerate.
+
+    user_message is None for a regenerate, where the last user turn is
+    already in the database and the assistant turn after it has been
+    removed."""
+    if manager.model is None:
+        yield sse("error", {"message": manager.load_error or "no model is loaded"})
+        return
+
+    history = load_history(session_id)
+    if user_message is None:
+        # regenerate: the newest turn in the database is the user message to answer
+        if not history or history[-1][0] != "user":
+            yield sse("error", {"message": "nothing to regenerate"})
+            return
+        user_message = history[-1][1]
+        history = history[:-1]
+    else:
+        timestamp = now_iso()
+        with closing(open_database()) as connection:
+            connection.execute(
+                "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                (session_id, "user", user_message, timestamp),
+            )
+            if not history:
+                title = user_message.strip().split("\n")[0][:60] or "New chat"
+                connection.execute("UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
+                                    (title, timestamp, session_id))
+            else:
+                connection.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (timestamp, session_id))
+            connection.commit()
+
+    special = manager.special_tokens
+    context_length = manager.model_config.max_sequence_length
+    # leave room for the reply: the prompt may use at most the context minus the reply length
+    max_prompt_tokens = max(16, context_length - settings.max_new_tokens)
+    prompt_token_ids = build_prompt_token_ids(
+        manager.tokenizer, history, user_message, special,
+        system_prompt=system_prompt, max_prompt_tokens=max_prompt_tokens,
+    )
+
+    request_id = str(uuid.uuid4())
+    stop_event = threading.Event()
+    with active_generations_lock:
+        active_generations[request_id] = stop_event
+
+    yield sse("start", {"request_id": request_id, "prompt_tokens": len(prompt_token_ids),
+                        "model": manager.checkpoint_name})
+
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    SENTINEL = object()
+
+    def generate_on_worker_thread():
+        """Runs the blocking PyTorch generation loop off the event loop and
+        hands each text delta back through the asyncio queue."""
+        decoder = IncrementalTextDecoder(manager.tokenizer, skip_special_tokens=True)
+        token_count = 0
+        started = time.time()
+        try:
+            with manager.generation_lock:
+                prompt_tensor = torch.tensor([prompt_token_ids], dtype=torch.long, device=manager.device)
+                for token_id in manager.model.generate_stream(
+                    prompt_tensor,
+                    max_new_tokens=settings.max_new_tokens,
+                    temperature=settings.temperature,
+                    top_k=settings.top_k or None,
+                    top_p=settings.top_p if settings.top_p < 1.0 else None,
+                    min_p=settings.min_p or None,
+                    stop_token_ids=special.stop_ids,
+                    repetition_penalty=settings.repetition_penalty,
+                    frequency_penalty=settings.frequency_penalty,
+                    presence_penalty=settings.presence_penalty,
+                    repetition_window=DEFAULT_SAMPLING["repetition_window"],
+                    protected_token_ids=special.all_special_ids,
+                    seed=settings.seed,
+                    should_stop=stop_event.is_set,
+                ):
+                    if token_id in special.stop_ids:
+                        break
+                    token_count += 1
+                    delta = decoder.push(token_id)
+                    if delta:
+                        loop.call_soon_threadsafe(queue.put_nowait, {"delta": delta})
+                # release any character still held back mid-encoding at the cut-off point
+                trailing = decoder.flush()
+                if trailing:
+                    loop.call_soon_threadsafe(queue.put_nowait, {"delta": trailing})
+            elapsed = max(time.time() - started, 1e-6)
+            loop.call_soon_threadsafe(queue.put_nowait, {
+                "done": True, "text": decoder.text, "token_count": token_count,
+                "tokens_per_second": token_count / elapsed, "stopped": stop_event.is_set(),
+            })
+        except Exception as error:  # a CUDA OOM here must reach the browser, not vanish
+            loop.call_soon_threadsafe(queue.put_nowait, {"error": f"{type(error).__name__}: {error}"})
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
+
+    threading.Thread(target=generate_on_worker_thread, daemon=True).start()
+
+    final_text, final_stats = "", {}
+    try:
+        while True:
+            item = await queue.get()
+            if item is SENTINEL:
+                break
+            if "delta" in item:
+                yield sse("delta", {"text": item["delta"]})
+            elif "error" in item:
+                yield sse("error", {"message": item["error"]})
+            elif item.get("done"):
+                final_text = item["text"]
+                final_stats = item
+                yield sse("done", {
+                    "token_count": item["token_count"],
+                    "tokens_per_second": round(item["tokens_per_second"], 2),
+                    "stopped": item["stopped"],
+                })
+            # if the browser navigated away, stop burning GPU time on a reply nobody will read
+            if await http_request.is_disconnected():
+                stop_event.set()
+    finally:
+        stop_event.set()
+        with active_generations_lock:
+            active_generations.pop(request_id, None)
+
+        if final_text.strip():
+            with closing(open_database()) as connection:
+                connection.execute(
+                    """INSERT INTO messages (session_id, role, content, timestamp, model, token_count, tokens_per_second)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (session_id, "assistant", final_text, now_iso(), manager.checkpoint_name,
+                     final_stats.get("token_count"), final_stats.get("tokens_per_second")),
+                )
+                connection.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now_iso(), session_id))
+                connection.commit()
+
+
+@app.post("/api/chat")
+async def api_chat(request: ChatRequest, http_request: Request):
+    return StreamingResponse(
+        stream_reply(request.session_id, request.message,
+                     request.system_prompt, request.settings, http_request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/regenerate")
+async def api_regenerate(request: RegenerateRequest, http_request: Request):
+    """Drops the last assistant turn and answers the same user message
+    again."""
+    with closing(open_database()) as connection:
+        row = connection.execute(
+            "SELECT id, role FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+            (request.session_id,),
+        ).fetchone()
+        if row is not None and row["role"] == "assistant":
+            connection.execute("DELETE FROM messages WHERE id = ?", (row["id"],))
+            connection.commit()
+
+    return StreamingResponse(
+        stream_reply(request.session_id, None,
+                     request.system_prompt, request.settings, http_request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def main():
+    global manager
+
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument("--host", default="127.0.0.1")
+    argument_parser.add_argument("--port", type=int, default=8000)
+    argument_parser.add_argument("--checkpoint", default=None,
+                                  help="checkpoint filename inside ../checkpoints (default: best available chat checkpoint)")
+    argument_parser.add_argument("--tokenizer-dir", default=None,
+                                  help="tokenizer directory (default: ../tokenizer). A checkpoint only makes "
+                                       "sense with the tokenizer it was trained on -- token ids mean nothing "
+                                       "across different tokenizers.")
+    argument_parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    args = argument_parser.parse_args()
+
+    if args.tokenizer_dir:
+        global TOKENIZER_DIRECTORY
+        TOKENIZER_DIRECTORY = os.path.abspath(args.tokenizer_dir)
+
+    initialize_database()
+    manager = ModelManager(args.device)
+
+    checkpoint_name = args.checkpoint or choose_default_checkpoint()
+    if checkpoint_name is None:
+        print(f"no checkpoints found in {CHECKPOINT_DIRECTORY} -- the UI will start, but "
+              f"chatting needs a checkpoint from train.py / sft_train.py")
+    else:
+        manager.load(os.path.basename(checkpoint_name))
+
+    if os.path.isdir(STATIC_DIRECTORY):
+        app.mount("/static", StaticFiles(directory=STATIC_DIRECTORY), name="static")
+
+    import uvicorn
+    print(f"\n  open http://{args.host}:{args.port}\n")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+
+
+if __name__ == "__main__":
+    main()
