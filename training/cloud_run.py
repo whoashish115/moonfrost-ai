@@ -99,3 +99,63 @@ FINETUNE_TIMEOUT_MINUTES = 88
 
 MICRO_BATCH_SIZE = 24        # sequences resident at once: ~24k tokens per micro-batch
 GRAD_ACCUM = 12              # -> 294,912 tokens per optimizer step
+MAX_LEARNING_RATE = 6e-4
+MIN_LEARNING_RATE = 6e-5
+WARMUP_STEPS = {1: 300, 2: 150}   # phase 2 only needs a short re-warm for its fresh optimizer
+
+FINETUNE_MICRO_BATCH = 24
+FINETUNE_GRAD_ACCUM = 3
+FINETUNE_MAX_LR = 2e-4
+FINETUNE_MIN_LR = 2e-5
+
+# ----------------------------------------------------------------------
+# Budget
+# ----------------------------------------------------------------------
+
+# What each phase is allowed to spend. Phases 1 and 2 are finished and came in under
+# budget; phase 3 is the fine-tune, and its figure is what was left after roughly $0.70
+# went on a first launch that was stopped early once the persona mix was found to be too
+# small. Every timeout below is sized against these, and the assert underneath refuses to
+# import the module if a plan could exceed one.
+PHASE_BUDGET_USD = {1: 30.0, 2: 30.0, 3: 7.80}
+PRICE_PER_SECOND = {"H100": 0.001097, "cpu_core": 0.0000131, "memory_gib": 0.00000222}
+
+CPU_STAGE = dict(cpu=16, memory_gib=32, gpu=None)
+GPU_STAGE = dict(cpu=4, memory_gib=32, gpu="H100")
+TINY_STAGE = dict(cpu=0.125, memory_gib=1, gpu=None)
+
+PREPARE_TIMEOUT_MINUTES = 60
+# Chat-only preparation skips the FineWeb download and tokenizer training, so it needs
+# far less wall clock -- and on the fine-tune phase every minute of timeout is budget.
+CHAT_PREPARE_TIMEOUT_MINUTES = 25
+PREFLIGHT_TIMEOUT_MINUTES = 10
+EXPORT_TIMEOUT_MINUTES = 15
+# must exceed the WHOLE phase-2 chain: data prep + pretrain + chat tuning + export,
+# or the orchestrator is killed before it can launch the later stages
+ORCHESTRATOR_TIMEOUT_MINUTES = 500
+
+
+def stage_cost_per_second(stage):
+    gpu_price = PRICE_PER_SECOND[stage["gpu"]] if stage["gpu"] else 0.0
+    return (gpu_price + stage["cpu"] * PRICE_PER_SECOND["cpu_core"]
+            + stage["memory_gib"] * PRICE_PER_SECOND["memory_gib"])
+
+
+def worst_case_by_phase():
+    """The most each phase can possibly be charged: every stage running to
+    its full Modal timeout."""
+    prepare = stage_cost_per_second(CPU_STAGE) * PREPARE_TIMEOUT_MINUTES * 60
+    chat_prepare = stage_cost_per_second(CPU_STAGE) * CHAT_PREPARE_TIMEOUT_MINUTES * 60
+    preflight_cost = stage_cost_per_second(GPU_STAGE) * PREFLIGHT_TIMEOUT_MINUTES * 60
+    export_cost = stage_cost_per_second(CPU_STAGE) * EXPORT_TIMEOUT_MINUTES * 60
+    orchestrator = stage_cost_per_second(TINY_STAGE) * ORCHESTRATOR_TIMEOUT_MINUTES * 60
+    pretrain = {phase: stage_cost_per_second(GPU_STAGE) * PRETRAIN_TIMEOUT_MINUTES[phase] * 60 for phase in (1, 2)}
+    finetune_cost = stage_cost_per_second(GPU_STAGE) * FINETUNE_TIMEOUT_MINUTES * 60
+    return {
+        1: {"data prep": prepare, "preflight": preflight_cost, "pretrain phase 1": pretrain[1],
+            "orchestrator": orchestrator},
+        2: {"data prep": prepare, "pretrain phase 2": pretrain[2],
+            "export": export_cost, "orchestrator": orchestrator},
+        3: {"chat data prep": chat_prepare, "chat tuning": finetune_cost,
+            "export": export_cost, "orchestrator": orchestrator},
+    }
