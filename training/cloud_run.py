@@ -159,3 +159,144 @@ def worst_case_by_phase():
         3: {"chat data prep": chat_prepare, "chat tuning": finetune_cost,
             "export": export_cost, "orchestrator": orchestrator},
     }
+
+
+def print_budget():
+    print("\nWORST CASE per phase (every stage hitting its full timeout)")
+    for phase, stages in worst_case_by_phase().items():
+        print(f"  phase {phase} (budget ${PHASE_BUDGET_USD[phase]:.2f}):")
+        for name, cost in stages.items():
+            print(f"    {name:<20s} ${cost:6.2f}")
+        print(f"    {'TOTAL':<20s} ${sum(stages.values()):6.2f}")
+    expected = {
+        1: 0.45 + 0.30 + stage_cost_per_second(GPU_STAGE) * (PRETRAIN_MINUTES[1] + 8) * 60 + 0.03,
+        2: 0.40 + stage_cost_per_second(GPU_STAGE) * (PRETRAIN_MINUTES[2] + 8) * 60 + 0.10,
+        3: 0.20 + stage_cost_per_second(GPU_STAGE) * (FINETUNE_MINUTES + 6) * 60 + 0.10,
+    }
+    print("\n  EXPECTED: " + ", ".join(f"phase {phase} ~${cost:.2f}"
+                                       for phase, cost in expected.items())
+          + f", total ~${sum(expected.values()):.2f}")
+
+
+for _phase, _stages in worst_case_by_phase().items():
+    assert sum(_stages.values()) <= PHASE_BUDGET_USD[_phase], (
+        f"phase {_phase} could be charged ${sum(_stages.values()):.2f}, over its "
+        f"${PHASE_BUDGET_USD[_phase]:.2f} budget -- lower a timeout before running anything")
+
+# ----------------------------------------------------------------------
+# Modal setup
+# ----------------------------------------------------------------------
+
+app = modal.App("llm-v2")
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch==2.6.0", "numpy", "tokenizers", "datasets", "pyarrow",
+                 "huggingface_hub", "hf_transfer")
+    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "KMP_DUPLICATE_LIB_OK": "TRUE", "PYTHONUNBUFFERED": "1"})
+    .add_local_dir(HERE, remote_path="/root/training",
+                   ignore=["__pycache__", "*.pyc", "db", "static", "*.jsonl", "*.txt", "*.md"])
+)
+
+VOLUME = modal.Volume.from_name("llm-v2", create_if_missing=True)
+MOUNTS = {"/vol": VOLUME}
+
+DATA_DIR = "/vol/data"
+TOKENIZER_DIR = "/vol/tokenizer"
+CHECKPOINT_DIR = "/vol/checkpoints"
+MARKER_DIR = "/vol/markers"
+TRAINING_DIR = "/root/training"
+
+# ----------------------------------------------------------------------
+# Command lines, as data so they can be validated without running anything
+# ----------------------------------------------------------------------
+
+def pretrain_arguments(phase, data_dir=DATA_DIR, tokenizer_dir=TOKENIZER_DIR, checkpoint_dir=CHECKPOINT_DIR,
+                       resume_from="", minutes=None, schedule_start=None, warmup_steps=None):
+    """The exact train.py command line for one pretraining phase.
+
+    The override parameters exist for restarting an interrupted phase. A run
+    that stopped a third of the way through must not restart the learning-rate
+    curve from the beginning: pass the minutes that remain and the point on the
+    curve it had already reached, and the schedule carries on from there."""
+    arguments = [
+        "--size", MODEL_SIZE, "--tag", f"base{phase}", "--data-dir", data_dir,
+        "--tokenizer-dir", tokenizer_dir, "--ckpt-dir", checkpoint_dir,
+        "--minutes", PRETRAIN_MINUTES[phase] if minutes is None else minutes,
+        "--lr-schedule", "time",
+        "--schedule-start", (0.0 if phase == 1 else SCHEDULE_SPLIT) if schedule_start is None else schedule_start,
+        "--schedule-end", SCHEDULE_SPLIT if phase == 1 else 1.0,
+        "--micro-batch-size", MICRO_BATCH_SIZE, "--grad-accum", GRAD_ACCUM,
+        "--max-lr", MAX_LEARNING_RATE, "--min-lr", MIN_LEARNING_RATE,
+        "--warmup-steps", WARMUP_STEPS[phase] if warmup_steps is None else warmup_steps,
+        "--eval-interval", 500, "--eval-iters", 20, "--checkpoint-interval", 1000,
+    ]
+    if resume_from:
+        # continues the SAME run: optimizer moments, step counter and best-so-far restored
+        arguments += ["--resume", resume_from]
+    elif phase == 2:
+        # weights only: phase 1's optimizer state stays behind on the other machine
+        arguments += ["--init-from", f"{checkpoint_dir}/phase1_weights.pt"]
+    return arguments
+
+
+def preflight_arguments(data_dir=DATA_DIR, tokenizer_dir=TOKENIZER_DIR):
+    """A three-minute version of the real thing: same model, same data, same
+    batch shape, nothing saved."""
+    return [
+        "--size", MODEL_SIZE, "--tag", "preflight", "--data-dir", data_dir,
+        "--tokenizer-dir", tokenizer_dir, "--ckpt-dir", "/tmp/preflight",
+        "--minutes", 3.0, "--lr-schedule", "time",
+        "--micro-batch-size", MICRO_BATCH_SIZE, "--grad-accum", GRAD_ACCUM,
+        "--max-lr", MAX_LEARNING_RATE, "--min-lr", MIN_LEARNING_RATE, "--warmup-steps", 50,
+        "--eval-interval", 10 ** 9, "--checkpoint-interval", 10 ** 9, "--log-interval", 5,
+    ]
+
+
+def finetune_arguments(base_checkpoint, data_dir=DATA_DIR, checkpoint_dir=CHECKPOINT_DIR):
+    return [
+        "--init-from", base_checkpoint, "--data-dir", data_dir, "--ckpt-dir", checkpoint_dir,
+        "--tag", "chat", "--minutes", FINETUNE_MINUTES, "--lr-schedule", "time", "--epochs", 3.0,
+        "--batch-size", FINETUNE_MICRO_BATCH, "--grad-accum", FINETUNE_GRAD_ACCUM,
+        "--max-lr", FINETUNE_MAX_LR, "--min-lr", FINETUNE_MIN_LR, "--warmup-steps", 100,
+        "--eval-interval", 200, "--eval-iters", 10, "--checkpoint-interval", 400,
+    ]
+
+
+# ----------------------------------------------------------------------
+# Small helpers used inside the containers
+# ----------------------------------------------------------------------
+
+def marker_path(name):
+    return os.path.join(MARKER_DIR, f"{name}.json")
+
+
+def is_done(name):
+    return os.path.exists(marker_path(name))
+
+
+def mark_done(name, **details):
+    os.makedirs(MARKER_DIR, exist_ok=True)
+    with open(marker_path(name), "w", encoding="utf-8") as handle:
+        json.dump({"finished_at": time.strftime("%Y-%m-%d %H:%M:%S"), **details}, handle, indent=2)
+    VOLUME.commit()
+
+
+def commit_periodically(interval_seconds=300):
+    """Commits the volume on a timer; returns a function that stops it.
+
+    Checkpoints written mid-run only become durable once the volume is
+    committed. Without this, a run that times out or crashes at hour four
+    leaves the volume exactly as it was at hour zero."""
+    stop_event = threading.Event()
+
+    def loop():
+        while not stop_event.wait(interval_seconds):
+            try:
+                VOLUME.commit()
+                print(f"[modal] volume committed at {time.strftime('%H:%M:%S')}", flush=True)
+            except Exception as error:
+                print(f"[modal] commit failed: {error}", flush=True)
+
+    threading.Thread(target=loop, daemon=True).start()
+    return stop_event.set
