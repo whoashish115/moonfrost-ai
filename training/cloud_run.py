@@ -300,3 +300,243 @@ def commit_periodically(interval_seconds=300):
 
     threading.Thread(target=loop, daemon=True).start()
     return stop_event.set
+
+
+def run_script(script_name, arguments):
+    command = [sys.executable, f"{TRAINING_DIR}/{script_name}"] + [str(argument) for argument in arguments]
+    print("[modal] " + " ".join(command), flush=True)
+    completed = subprocess.run(command, cwd=TRAINING_DIR)
+    if completed.returncode != 0:
+        raise RuntimeError(f"{script_name} exited with code {completed.returncode}")
+
+
+def require(*paths):
+    missing = [path for path in paths if not os.path.exists(path)]
+    if missing:
+        raise SystemExit("missing required file(s) on the volume:\n  " + "\n  ".join(missing))
+
+
+# ----------------------------------------------------------------------
+# Stage 1: data
+# ----------------------------------------------------------------------
+
+@app.function(image=image, cpu=CPU_STAGE["cpu"], memory=CPU_STAGE["memory_gib"] * 1024,
+              timeout=PREPARE_TIMEOUT_MINUTES * 60, volumes=MOUNTS, scaledown_window=2)
+def prepare_data(phase: int):
+    """Tokenizer (phase 1 only), pretraining tokens, and -- in phase 2 --
+    the packed chat dataset."""
+    sys.path.insert(0, TRAINING_DIR)
+    for directory in (DATA_DIR, TOKENIZER_DIR, CHECKPOINT_DIR, MARKER_DIR):
+        os.makedirs(directory, exist_ok=True)
+
+    if phase == 1 and not is_done("tokenizer"):
+        _train_tokenizer()
+    require(f"{TOKENIZER_DIR}/tokenizer.json")   # in phase 2 this was uploaded from phase 1
+
+    if not is_done(f"pretrain_data_phase{phase}"):
+        _build_pretraining_tokens(phase)
+
+    if phase == 2 and not is_done("chat_data"):
+        _build_chat_data()
+
+    VOLUME.commit()
+    print("[modal] data ready:", sorted(os.listdir(DATA_DIR)), flush=True)
+
+
+def _download_shard(shard_index):
+    from huggingface_hub import hf_hub_download
+    print(f"[modal] downloading FineWeb-Edu shard {shard_index}...", flush=True)
+    return hf_hub_download(FINEWEB_REPO, f"sample/10BT/{shard_index:03d}_00000.parquet",
+                           repo_type="dataset", local_dir="/tmp/fineweb")
+
+
+def _train_tokenizer():
+    """Byte-level BPE trained on our own text, exactly as tokenizer_train.py
+    does, on a sample taken from the first shard."""
+    import pyarrow.parquet as pq
+
+    from download_pretrain_data import clean_text
+
+    shard_path = _download_shard(FINEWEB_SHARDS[1][0])
+    sample_path = "/tmp/tokenizer_sample.txt"
+    written = 0
+    with open(sample_path, "w", encoding="utf-8") as handle:
+        for batch in pq.ParquetFile(shard_path).iter_batches(batch_size=10000, columns=["text"]):
+            for text in batch.column(0).to_pylist():
+                if not text or len(text) < 200:
+                    continue
+                cleaned = clean_text(text)
+                handle.write(cleaned + "\n")
+                written += len(cleaned)
+            if written >= TOKENIZER_SAMPLE_BYTES:
+                break
+    print(f"[modal] training tokenizer on {written/1e9:.2f} GB of text...", flush=True)
+    run_script("tokenizer_train.py", ["--input", sample_path, "--vocab-size", VOCAB_SIZE,
+                                       "--out-dir", TOKENIZER_DIR])
+    os.remove(sample_path)
+    mark_done("tokenizer", vocab_size=VOCAB_SIZE, sample_bytes=written)
+
+
+def _build_pretraining_tokens(phase):
+    """Streams this phase's shards through the tokenizer into a flat uint16
+    token file. Memory stays flat: one parquet row-batch at a time."""
+    import itertools
+
+    import numpy as np
+    import pyarrow.parquet as pq
+    from tokenizers import Tokenizer
+
+    from download_pretrain_data import clean_text
+
+    tokenizer = Tokenizer.from_file(f"{TOKENIZER_DIR}/tokenizer.json")
+    end_of_text = tokenizer.token_to_id("<|endoftext|>")
+    assert tokenizer.get_vocab_size() <= 65536, "vocabulary must fit in uint16"
+
+    train_path = f"{DATA_DIR}/train.bin"
+    temporary_path = train_path + ".tmp"
+    validation_path = f"{DATA_DIR}/val.bin"
+    # phase 1 carves out a validation set; phase 2 reuses that same file (carried across with
+    # the tokenizer) so the loss curves from the two phases are directly comparable
+    validation_target = 10_000_000 if phase == 1 else 0
+    validation_written = 0
+    total_tokens, documents, started = 0, 0, time.time()
+
+    validation_output = open(validation_path + ".tmp", "wb") if validation_target else None
+    with open(temporary_path, "wb") as output:
+        for shard_index in FINEWEB_SHARDS[phase]:
+            shard_path = _download_shard(shard_index)
+            for batch in pq.ParquetFile(shard_path).iter_batches(batch_size=20000, columns=["text"]):
+                texts = [clean_text(text) for text in batch.column(0).to_pylist() if text and len(text) >= 200]
+                if not texts:
+                    continue
+                encodings = tokenizer.encode_batch(texts)
+                token_count = sum(len(encoding.ids) + 1 for encoding in encodings)
+                tokens = np.fromiter(
+                    itertools.chain.from_iterable(encoding.ids + [end_of_text] for encoding in encodings),
+                    dtype=np.uint16, count=token_count,
+                )
+                if validation_output is not None and validation_written < validation_target:
+                    take = min(validation_target - validation_written, len(tokens))
+                    validation_output.write(tokens[:take].tobytes())
+                    validation_written += take
+                    tokens = tokens[take:]
+                output.write(tokens.tobytes())
+                total_tokens += len(tokens)
+                documents += len(texts)
+                if documents % 200000 < 20000:
+                    print(f"[modal] {documents:,} documents, {total_tokens/1e9:.2f}B tokens, "
+                          f"{total_tokens/max(1.0, time.time()-started)/1e6:.1f}M tokens/s", flush=True)
+            os.remove(shard_path)
+
+    if validation_output is not None:
+        validation_output.close()
+        os.replace(validation_path + ".tmp", validation_path)
+    os.replace(temporary_path, train_path)
+    require(validation_path)
+
+    print(f"[modal] phase {phase}: {total_tokens/1e9:.2f}B training tokens from {documents:,} documents "
+          f"in {(time.time()-started)/60:.1f} min", flush=True)
+    mark_done(f"pretrain_data_phase{phase}", tokens=total_tokens, documents=documents,
+              shards=list(FINEWEB_SHARDS[phase]))
+
+
+def _build_chat_data():
+    """Packs real conversations into fixed-length rows (see sft_data.py)."""
+    from datasets import load_dataset
+    from tokenizers import Tokenizer
+
+    import sft_data
+    from chat_format import ChatSpecialTokens
+
+    tokenizer_path = f"{TOKENIZER_DIR}/tokenizer.json"
+    special_tokens = ChatSpecialTokens(Tokenizer.from_file(tokenizer_path))
+    encode_kwargs = {"tokenizer_path": tokenizer_path, "block_size": BLOCK_SIZE}
+
+    def encode(dataset):
+        return dataset.select_columns(["messages"]).map(
+            sft_data.encode_examples, batched=True, batch_size=500, num_proc=16,
+            fn_kwargs=encode_kwargs, remove_columns=["messages"],
+        )
+
+    print(f"[modal] downloading {CHAT_DATASET}...", flush=True)
+    train_parts = [encode(load_dataset(CHAT_DATASET, split="train").shuffle(seed=1337))]
+    everyday = encode(load_dataset(*CHAT_EXTRA_DATASET, split="train"))
+    train_parts += [everyday] * CHAT_EXTRA_REPEATS
+    train_parts.append(encode(_persona_dataset()))
+
+    validation = load_dataset(CHAT_DATASET, split="test")
+    validation = encode(validation.select(range(min(3000, len(validation)))))
+
+    for split_name, parts in (("train", train_parts), ("val", [validation])):
+        ids, labels, stats = sft_data.pack_encoded(parts, BLOCK_SIZE, special_tokens.end_of_text)
+        sft_data.save_split(DATA_DIR, split_name, ids, labels)
+        print(f"[modal] chat {split_name}: {stats['rows']:,} rows, {stats['conversations']:,} conversations "
+              f"({stats['conversations_per_row']:.1f} per row), "
+              f"{stats['supervised_fraction']*100:.0f}% of positions supervised", flush=True)
+    mark_done("chat_data")
+
+
+def _persona_dataset():
+    """The hand-written identity and memory conversations, as a Dataset."""
+    from datasets import Dataset
+
+    import persona_data
+
+    rows = persona_data.generate(PERSONA_CONVERSATIONS)
+    print(f"[modal] persona set: {len(rows):,} conversations about "
+          f"{persona_data.MODEL_NAME} and {persona_data.CREATOR}", flush=True)
+    return Dataset.from_list(rows)
+
+
+@app.function(image=image, cpu=CPU_STAGE["cpu"], memory=CPU_STAGE["memory_gib"] * 1024,
+              timeout=CHAT_PREPARE_TIMEOUT_MINUTES * 60, volumes=MOUNTS, scaledown_window=2)
+def prepare_chat_data():
+    """Packs the chat dataset only -- for a machine that already has the
+    tokenizer and a pretrained checkpoint uploaded to its volume, and needs
+    nothing from FineWeb."""
+    sys.path.insert(0, TRAINING_DIR)
+    for directory in (DATA_DIR, TOKENIZER_DIR, CHECKPOINT_DIR, MARKER_DIR):
+        os.makedirs(directory, exist_ok=True)
+    require(f"{TOKENIZER_DIR}/tokenizer.json")
+
+    if not is_done("chat_data"):
+        _build_chat_data()
+
+    VOLUME.commit()
+    print("[modal] chat data ready:", sorted(os.listdir(DATA_DIR)), flush=True)
+
+
+# ----------------------------------------------------------------------
+# Stage 2: preflight
+# ----------------------------------------------------------------------
+
+@app.function(image=image, gpu=GPU_STAGE["gpu"], cpu=GPU_STAGE["cpu"],
+              memory=GPU_STAGE["memory_gib"] * 1024, timeout=PREFLIGHT_TIMEOUT_MINUTES * 60,
+              volumes=MOUNTS, scaledown_window=2)
+def preflight():
+    """Three paid minutes that de-risk nine paid hours: builds the real model
+    on the real data, compiles it, runs it, and reports measured tokens per
+    second and peak memory. Nothing is saved."""
+    sys.path.insert(0, TRAINING_DIR)
+    require(f"{DATA_DIR}/train.bin", f"{DATA_DIR}/val.bin", f"{TOKENIZER_DIR}/tokenizer.json")
+
+    import torch
+
+    run_script("train.py", preflight_arguments())
+    total_minutes = PRETRAIN_MINUTES[1] + PRETRAIN_MINUTES[2]
+    print(f"\n[modal] peak VRAM {torch.cuda.max_memory_allocated()/1e9:.1f} GB of "
+          f"{torch.cuda.get_device_properties(0).total_memory/1e9:.0f} GB", flush=True)
+    print(f"[modal] take the steady-state tok/s printed above and multiply by {total_minutes*60:,} "
+          f"seconds to get the tokens the full two-phase run will see", flush=True)
+
+
+# ----------------------------------------------------------------------
+# Stage 3: pretraining
+# ----------------------------------------------------------------------
+
+@app.function(image=image, gpu=GPU_STAGE["gpu"], cpu=GPU_STAGE["cpu"],
+              memory=GPU_STAGE["memory_gib"] * 1024, timeout=PRETRAIN_TIMEOUT_MINUTES[1] * 60,
+              volumes=MOUNTS, scaledown_window=2)
+def pretrain_phase1(resume_from: str = "", minutes: float = 0.0,
+                    schedule_start: float = -1.0, warmup_steps: int = 0):
+    _pretrain(1, resume_from, minutes, schedule_start, warmup_steps)
