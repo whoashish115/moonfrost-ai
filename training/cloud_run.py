@@ -540,3 +540,207 @@ def preflight():
 def pretrain_phase1(resume_from: str = "", minutes: float = 0.0,
                     schedule_start: float = -1.0, warmup_steps: int = 0):
     _pretrain(1, resume_from, minutes, schedule_start, warmup_steps)
+
+
+@app.function(image=image, gpu=GPU_STAGE["gpu"], cpu=GPU_STAGE["cpu"],
+              memory=GPU_STAGE["memory_gib"] * 1024, timeout=PRETRAIN_TIMEOUT_MINUTES[2] * 60,
+              volumes=MOUNTS, scaledown_window=2)
+def pretrain_phase2(resume_from: str = "", minutes: float = 0.0,
+                    schedule_start: float = -1.0, warmup_steps: int = 0):
+    _pretrain(2, resume_from, minutes, schedule_start, warmup_steps)
+
+
+def _pretrain(phase, resume_from="", minutes=0.0, schedule_start=-1.0, warmup_steps=0):
+    sys.path.insert(0, TRAINING_DIR)
+    require(f"{DATA_DIR}/train.bin", f"{DATA_DIR}/val.bin", f"{TOKENIZER_DIR}/tokenizer.json")
+    if is_done(f"pretrain_phase{phase}"):
+        print(f"[modal] phase {phase} already finished; skipping", flush=True)
+        return
+    if phase == 2:
+        require(f"{CHECKPOINT_DIR}/phase1_weights.pt")
+
+    if resume_from:
+        require(resume_from)
+        print(f"[modal] resuming phase {phase} from {resume_from}", flush=True)
+    arguments = pretrain_arguments(
+        phase, resume_from=resume_from,
+        minutes=minutes if minutes > 0 else None,
+        schedule_start=schedule_start if schedule_start >= 0 else None,
+        warmup_steps=warmup_steps if warmup_steps > 0 else None,
+    )
+    stop_committing = commit_periodically()
+    try:
+        run_script("train.py", arguments)
+    finally:
+        stop_committing()
+        VOLUME.commit()
+
+    mark_done(f"pretrain_phase{phase}", minutes=PRETRAIN_MINUTES[phase])
+    if phase == 1:
+        _export_weights_for_transfer()
+
+
+def _export_weights_for_transfer():
+    """Writes the bfloat16, optimizer-free copy of phase 1 that phase 2
+    needs: ~1.5GB instead of ~9GB."""
+    import torch
+
+    import checkpoint_utils
+
+    source = f"{CHECKPOINT_DIR}/base1_best.pt"
+    if not os.path.exists(source):
+        source = f"{CHECKPOINT_DIR}/base1_last.pt"
+    require(source)
+    checkpoint = checkpoint_utils._torch_load_tolerant(source, map_location="cpu", mmap=True)
+    checkpoint_utils.save_checkpoint_atomically({
+        "model": {key: value.to(torch.bfloat16) for key, value in checkpoint["model"].items()},
+        "step": checkpoint.get("step", 0),
+        "best_val": checkpoint.get("best_val", float("nan")),
+        "model_config": checkpoint["model_config"],
+        "inference_only": True,
+    }, f"{CHECKPOINT_DIR}/phase1_weights.pt")
+    VOLUME.commit()
+
+    size_gb = os.path.getsize(f"{CHECKPOINT_DIR}/phase1_weights.pt") / 1e9
+    transfer = ("tokenizer/tokenizer.json", "data/val.bin", "checkpoints/phase1_weights.pt")
+    print(f"\n[cloud] PHASE 1 COMPLETE. Move these to phase 2 (~{size_gb:.2f} GB):", flush=True)
+    print("  on the phase 1 machine:", flush=True)
+    for path in transfer:
+        print(f"    modal volume get llm-v2 {path} ./transfer/{os.path.basename(path)}", flush=True)
+    print("  then on the phase 2 machine:", flush=True)
+    for path in transfer:
+        print(f"    modal volume put llm-v2 ./transfer/{os.path.basename(path)} {path}", flush=True)
+    print("    modal run --detach cloud_run.py --stage phase2", flush=True)
+
+
+# ----------------------------------------------------------------------
+# Stage 4: chat tuning, samples, export
+# ----------------------------------------------------------------------
+
+@app.function(image=image, gpu=GPU_STAGE["gpu"], cpu=GPU_STAGE["cpu"],
+              memory=GPU_STAGE["memory_gib"] * 1024, timeout=FINETUNE_TIMEOUT_MINUTES * 60,
+              volumes=MOUNTS, scaledown_window=2)
+def finetune():
+    sys.path.insert(0, TRAINING_DIR)
+    base = f"{CHECKPOINT_DIR}/base2_best.pt"
+    if not os.path.exists(base):
+        base = f"{CHECKPOINT_DIR}/base2_last.pt"
+    require(base, f"{DATA_DIR}/sft_train_ids.npy")
+
+    stop_committing = commit_periodically()
+    try:
+        run_script("sft_train.py", finetune_arguments(base))
+    finally:
+        stop_committing()
+        VOLUME.commit()
+    mark_done("finetune")
+    _sample_replies()
+
+
+def _sample_replies():
+    """Prints real answers to a fixed set of prompts, so the run's own log
+    shows whether the model actually chats."""
+    chat_checkpoint = f"{CHECKPOINT_DIR}/chat_best.pt"
+    if not os.path.exists(chat_checkpoint):
+        chat_checkpoint = f"{CHECKPOINT_DIR}/chat_last.pt"
+    prompts = ["hi", "what is your name?", "what is bitcoin?", "name two colours",
+               "write a short poem about the moon", "how do I boil an egg?"]
+    for prompt in prompts:
+        print(f"\n=== {prompt}", flush=True)
+        try:
+            run_script("sample.py", ["--ckpt", chat_checkpoint, "--tokenizer-dir", TOKENIZER_DIR,
+                                      "--chat", "--prompt", prompt, "--temperature", 0.0,
+                                      "--max-new-tokens", 120])
+        except RuntimeError as error:
+            print(f"[modal] sampling failed: {error}", flush=True)
+
+
+@app.function(image=image, cpu=CPU_STAGE["cpu"], memory=CPU_STAGE["memory_gib"] * 1024,
+              timeout=EXPORT_TIMEOUT_MINUTES * 60, volumes=MOUNTS, scaledown_window=2)
+def export():
+    """Writes the small, inference-only checkpoint to download."""
+    sys.path.insert(0, TRAINING_DIR)
+    import checkpoint_utils
+
+    source = f"{CHECKPOINT_DIR}/chat_best.pt"
+    if not os.path.exists(source):
+        source = f"{CHECKPOINT_DIR}/chat_last.pt"
+    require(source)
+    _, before, after = checkpoint_utils.strip_optimizer_state(
+        source, destination_path=f"{CHECKPOINT_DIR}/chat_final.pt")
+    VOLUME.commit()
+    print(f"[modal] {os.path.basename(source)} {checkpoint_utils.format_bytes(before)} -> "
+          f"chat_final.pt {checkpoint_utils.format_bytes(after)}", flush=True)
+    print("\n[modal] download it with:\n"
+          "    modal volume get llm-v2 checkpoints/chat_final.pt ../checkpoints/chat_final.pt\n"
+          "  then chat locally with:\n"
+          "    python server.py --checkpoint chat_final.pt", flush=True)
+
+
+# ----------------------------------------------------------------------
+# Orchestrators (remote, so a disconnected laptop cannot stop the run)
+# ----------------------------------------------------------------------
+
+@app.function(image=image, cpu=TINY_STAGE["cpu"], memory=TINY_STAGE["memory_gib"] * 1024,
+              timeout=ORCHESTRATOR_TIMEOUT_MINUTES * 60, volumes=MOUNTS, scaledown_window=2)
+def run_phase1():
+    prepare_data.remote(1)
+    pretrain_phase1.remote()
+
+
+@app.function(image=image, cpu=TINY_STAGE["cpu"], memory=TINY_STAGE["memory_gib"] * 1024,
+              timeout=ORCHESTRATOR_TIMEOUT_MINUTES * 60, volumes=MOUNTS, scaledown_window=2)
+def run_phase2():
+    prepare_data.remote(2)
+    pretrain_phase2.remote()
+
+
+@app.function(image=image, cpu=TINY_STAGE["cpu"], memory=TINY_STAGE["memory_gib"] * 1024,
+              timeout=ORCHESTRATOR_TIMEOUT_MINUTES * 60, volumes=MOUNTS, scaledown_window=2)
+def run_finetune():
+    """The fine-tune-only stage. Expects checkpoints/base2_best.pt and
+    tokenizer/tokenizer.json to have been uploaded with `modal volume put`."""
+    require(f"{CHECKPOINT_DIR}/base2_best.pt", f"{TOKENIZER_DIR}/tokenizer.json")
+    prepare_chat_data.remote()
+    finetune.remote()
+    export.remote()
+
+
+@app.local_entrypoint()
+def main(stage: str = "budget", spawn: bool = False, resume_from: str = "",
+         minutes: float = 0.0, schedule_start: float = -1.0, warmup_steps: int = 0):
+    print_budget()
+    if stage == "budget":
+        print("\n(nothing was run; pass --stage preflight | phase1 | phase2)")
+        return
+
+    remote_stages = {
+        "preflight": preflight, "phase1": run_phase1, "phase2": run_phase2,
+        "finetune": run_finetune, "prepare_chat": prepare_chat_data,
+        "pretrain1": pretrain_phase1, "pretrain2": pretrain_phase2,
+        "finetune": finetune, "export": export,
+    }
+    pretrain_kwargs = {}
+    if stage in ("pretrain1", "pretrain2"):
+        pretrain_kwargs = dict(resume_from=resume_from, minutes=minutes,
+                               schedule_start=schedule_start, warmup_steps=warmup_steps)
+    print(f"\nlaunching stage: {stage}\n")
+    if stage == "prepare1":
+        prepare_data.remote(1)
+    elif stage == "prepare2":
+        prepare_data.remote(2)
+    elif stage in remote_stages:
+        if spawn:
+            # .spawn() starts the function and returns at once, so the launching terminal
+            # can exit immediately. A blocking .remote() keeps a client connection open for
+            # hours, and the job dies with whatever kills that client -- which is exactly
+            # how the first attempt at phase 1 was lost, despite --detach.
+            call = remote_stages[stage].spawn(**pretrain_kwargs)
+            print(f"spawned {stage}: function call {call.object_id}")
+            print("It now runs independently of this terminal. Follow it with:")
+            print("    modal app logs llm-v2")
+        else:
+            remote_stages[stage].remote(**pretrain_kwargs)
+    else:
+        raise SystemExit(f"unknown stage {stage!r}; choose from "
+                         f"{sorted(list(remote_stages) + ['prepare1', 'prepare2', 'budget'])}")
