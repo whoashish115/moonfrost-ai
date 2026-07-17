@@ -86,3 +86,20 @@ def barrier(distributed_context):
     (evaluation, checkpointing) so the ranks stay in lockstep."""
     if distributed_context.is_distributed:
         torch.distributed.barrier()
+
+
+def cosine_between(progress, max_learning_rate, min_learning_rate):
+    progress = min(max(progress, 0.0), 1.0)
+    return min_learning_rate + 0.5 * (1.0 + math.cos(math.pi * progress)) * (max_learning_rate - min_learning_rate)
+
+
+def learning_rate_at_step(step, train_config):
+    """Cosine decay schedule with linear warmup: ramps up from 0 to
+    max_learning_rate over warmup_steps, then follows a cosine curve down to
+    min_learning_rate by max_training_steps."""
+    if step < train_config.warmup_steps:
+        return train_config.max_learning_rate * (step + 1) / train_config.warmup_steps
+    if step >= train_config.max_training_steps:
+        return train_config.min_learning_rate
+    progress_through_decay = (step - train_config.warmup_steps) / max(1, train_config.max_training_steps - train_config.warmup_steps)
+    return cosine_between(progress_through_decay, train_config.max_learning_rate, train_config.min_learning_rate)
