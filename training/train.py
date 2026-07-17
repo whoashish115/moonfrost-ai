@@ -79,3 +79,10 @@ def load_random_batch(binary_file_path, sequence_length, batch_size, device):
         input_sequences = input_sequences.to(device)
         target_sequences = target_sequences.to(device)
     return input_sequences, target_sequences
+
+
+def barrier(distributed_context):
+    """Makes every process wait here. Needed around any work only rank 0 does
+    (evaluation, checkpointing) so the ranks stay in lockstep."""
+    if distributed_context.is_distributed:
+        torch.distributed.barrier()
