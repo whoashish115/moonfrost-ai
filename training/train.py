@@ -103,3 +103,6 @@ def learning_rate_at_step(step, train_config):
         return train_config.min_learning_rate
     progress_through_decay = (step - train_config.warmup_steps) / max(1, train_config.max_training_steps - train_config.warmup_steps)
     return cosine_between(progress_through_decay, train_config.max_learning_rate, train_config.min_learning_rate)
+
+
+@torch.no_grad()
