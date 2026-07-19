@@ -394,3 +394,69 @@ def build_repository(checkpoint_path, output_directory, repo_id, dtype, tokenize
     for name in sorted(os.listdir(output_directory)):
         print(f"  {name:30s} {checkpoint_utils.format_bytes(os.path.getsize(os.path.join(output_directory, name)))}")
     return output_directory
+
+
+def _write(directory, name, text):
+    with open(os.path.join(directory, name), "w", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def validate(output_directory, prompt="What is bitcoin?"):
+    """Loads the exported repo back through transformers the same way a
+    stranger downloading it would, and generates a few tokens."""
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    print(f"\nloading {output_directory} back through transformers...")
+    tokenizer = AutoTokenizer.from_pretrained(output_directory)
+    model = AutoModelForCausalLM.from_pretrained(output_directory, trust_remote_code=True)
+    model.eval()
+
+    text = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=False)
+    inputs = tokenizer(text, return_tensors="pt")
+    with torch.no_grad():
+        output = model.generate(**inputs, max_new_tokens=24, do_sample=False)
+    reply = tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    print(f"  chat template -> {text!r}")
+    print(f"  prompt: {prompt!r}")
+    print(f"  reply:  {reply!r}")
+    print("  the repository loads and generates correctly")
+
+
+def main():
+    argument_parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    argument_parser.add_argument("--ckpt", required=True)
+    argument_parser.add_argument("--out", default="../hf_repo")
+    argument_parser.add_argument("--tokenizer-dir", default="../tokenizer")
+    argument_parser.add_argument("--repo-id", default=None, help="e.g. yourname/moonfrost-777m-chat")
+    argument_parser.add_argument("--dtype", default="bfloat16", choices=["bfloat16", "float16", "float32"])
+    argument_parser.add_argument("--tokens", default="an unrecorded number of tokens",
+                                  help='e.g. "~4.2 billion tokens"')
+    argument_parser.add_argument("--pretrain-data", default="FineWeb-Edu (educational web text)")
+    argument_parser.add_argument("--chat-data", default="smol-smoltalk")
+    argument_parser.add_argument("--validate", action="store_true", help="load the result back through transformers")
+    argument_parser.add_argument("--push", action="store_true", help="upload to --repo-id (run `hf auth login` first)")
+    argument_parser.add_argument("--private", action="store_true")
+    args = argument_parser.parse_args()
+
+    build_repository(args.ckpt, args.out, args.repo_id, args.dtype, args.tokenizer_dir,
+                     args.tokens, args.pretrain_data, args.chat_data)
+    if args.validate:
+        validate(args.out)
+
+    if args.push:
+        if not args.repo_id:
+            raise SystemExit("--push needs --repo-id, e.g. --repo-id yourname/moonfrost-777m-chat")
+        from huggingface_hub import HfApi, whoami
+        try:
+            whoami()
+        except Exception:
+            raise SystemExit("not logged in. Run `hf auth login` yourself first "
+                             "(create a WRITE token at https://huggingface.co/settings/tokens)")
+        api = HfApi()
+        api.create_repo(args.repo_id, private=args.private, exist_ok=True, repo_type="model")
+        api.upload_folder(folder_path=args.out, repo_id=args.repo_id, repo_type="model")
+        print(f"\nuploaded: https://huggingface.co/{args.repo_id}")
+
+
+if __name__ == "__main__":
+    main()
