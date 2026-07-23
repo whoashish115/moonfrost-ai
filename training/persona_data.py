@@ -148,3 +148,46 @@ LIMIT_QUESTIONS = {
 # "My ...". The name list deliberately includes the project owner's own name.
 NAMES = ["Ashish", "Priya", "Daniel", "Mei", "Omar", "Sofia", "Ravi", "Hannah",
          "Tomas", "Aisha", "Leo", "Yuki", "Marcus", "Nina", "Arjun", "Clara"]
+CITIES = ["Delhi", "Toronto", "Berlin", "Osaka", "Lagos", "Lisbon", "Chennai",
+          "Melbourne", "Warsaw", "Nairobi", "Seattle", "Bogota"]
+JOBS = ["a nurse", "a student", "a teacher", "a software engineer", "an electrician",
+        "a chef", "an accountant", "a photographer", "a bus driver", "a researcher"]
+PETS = [("a dog", "Bruno"), ("a cat", "Misha"), ("a parrot", "Kiwi"),
+        ("a rabbit", "Pepper"), ("a dog", "Luna"), ("a cat", "Tiger")]
+COLOURS = ["blue", "green", "dark red", "yellow", "purple", "black", "orange"]
+FOODS = ["pasta", "dosa", "ramen", "tacos", "biryani", "sushi", "pierogi", "pho"]
+
+TELL_NAME = ["My name is {v}.", "I'm {v}.", "Hi, I'm {v}.", "My name is {v}, by the way.",
+             "You can call me {v}.", "Call me {v}.", "Hey, my name's {v}."]
+ASK_NAME = ["What is my name?", "what's my name?", "do you remember my name?",
+            "what did I say my name was?", "can you tell me my name?", "whats my name"]
+NAME_REPLY = ["Your name is {v}.", "You're {v}.", "You told me your name is {v}.",
+              "{v} -- you mentioned it earlier.", "Your name is {v}, as you said."]
+ACKNOWLEDGEMENTS = ["Nice to meet you, {v}. How can I help?", "Hello {v}! What can I do for you?",
+                    "Got it, {v}. I'll remember that.", "Hi {v}, good to meet you.",
+                    "Noted, {v}. What would you like to talk about?"]
+
+REMEMBERED_FACTS = [
+    ("I live in {v}.", "where do I live?", "You live in {v}.", CITIES),
+    ("I live in {v}.", "which city am I in?", "You're in {v}.", CITIES),
+    ("I'm from {v}.", "where am I from?", "You're from {v}.", CITIES),
+    ("I work as {v}.", "what do I do for work?", "You work as {v}.", JOBS),
+    ("I'm {v}.", "what's my job?", "You're {v}.", JOBS),
+    ("My favourite colour is {v}.", "what's my favourite colour?", "Your favourite colour is {v}.", COLOURS),
+    ("I really like {v}.", "what food do I like?", "You said you like {v}.", FOODS),
+    ("My favourite food is {v}.", "what's my favourite food?", "Your favourite food is {v}.", FOODS),
+]
+NEUTRAL_ACKS = ["Got it, I'll remember that.", "Noted.", "Thanks for telling me.",
+                "Okay, I've got that.", "Understood."]
+
+# ------------------------------------------------------- 6. admitting ignorance
+UNKNOWABLE = [
+    "what is the population of Mars in 2093?",
+    "what did I eat for breakfast yesterday?",
+    "what is my bank balance?",
+    "who won the football match last night?",
+    "what is my friend's phone number?",
+    "what will the stock market do tomorrow?",
+    "what am I thinking right now?",
+    "what's in my fridge?",
+]
