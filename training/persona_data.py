@@ -191,3 +191,177 @@ UNKNOWABLE = [
     "what am I thinking right now?",
     "what's in my fridge?",
 ]
+IGNORANCE_ANSWERS = [
+    "I don't know that -- I have no way to find out.",
+    "I can't answer that. I have no access to that information.",
+    "I don't know. That's outside anything I can see or remember.",
+    "Sorry, I genuinely don't know that one.",
+]
+
+GREETINGS = ["hi", "hello", "hey", "Hi!", "hey there", "yo", "good morning",
+             "hello there", "hi :)", "hey, you there?"]
+GREETING_REPLIES = ["Hello! How can I help you today?", "Hi! What can I do for you?",
+                    "Hey! What would you like to talk about?", "Hello! What's on your mind?",
+                    "Hi there! How can I help?"]
+
+CATEGORY_WEIGHTS = {
+    "identity": 13, "creator": 15, "misattribution": 8, "nature": 6, "size": 6,
+    "limits": 10, "memory_name": 14, "memory_fact": 10, "memory_multi": 6,
+    "ignorance": 6, "greeting": 6,
+}
+
+
+def fill(text):
+    """Substitutes the identity facts into a template."""
+    return text.format(model=MODEL_NAME, creator=CREATOR, creator_long=CREATOR_LONG,
+                       total=TOTAL_PARAMETERS, active=ACTIVE_PARAMETERS, tokens=TRAINING_TOKENS)
+
+
+def conversation(*turns):
+    roles = ("user", "assistant")
+    return {"messages": [{"role": roles[index % 2], "content": text}
+                         for index, text in enumerate(turns)]}
+
+
+def _single_exchange(rng, kind):
+    """One user->assistant pair for a category that needs no context."""
+    if kind == "identity":
+        return [rng.choice(IDENTITY_QUESTIONS), fill(rng.choice(IDENTITY_ANSWERS))]
+    if kind == "creator":
+        return [rng.choice(CREATOR_QUESTIONS), fill(rng.choice(CREATOR_ANSWERS))]
+    if kind == "misattribution":
+        turns = [rng.choice(MISATTRIBUTION_QUESTIONS), fill(rng.choice(DENIAL_ANSWERS))]
+        if rng.random() < 0.5:
+            turns += [rng.choice(["then who made you?", "who built you then?",
+                                  "so who created you?", "who are you then?"]),
+                      fill(rng.choice(CREATOR_ANSWERS))]
+        return turns
+    if kind == "nature":
+        return [rng.choice(NATURE_QUESTIONS), fill(rng.choice(NATURE_ANSWERS))]
+    if kind == "size":
+        return [rng.choice(SIZE_QUESTIONS), fill(rng.choice(SIZE_ANSWERS))]
+    if kind == "limits":
+        question = rng.choice(list(LIMIT_QUESTIONS))
+        return [question, rng.choice(LIMIT_ANSWERS[LIMIT_QUESTIONS[question]])]
+    return [rng.choice(UNKNOWABLE), rng.choice(IGNORANCE_ANSWERS)]
+
+
+CONTEXT_FREE_KINDS = ["identity", "creator", "misattribution", "nature", "size",
+                      "limits", "ignorance"]
+CONTEXT_FREE_WEIGHTS = [16, 20, 10, 8, 8, 14, 8]
+
+
+def _user_facts(rng):
+    """A random set of things the user tells the model about themselves, each
+    as (statement, question, answer) with the answer in second person."""
+    name = rng.choice(NAMES)
+    facts = [(rng.choice(TELL_NAME).format(v=name),
+              rng.choice(ASK_NAME),
+              rng.choice(NAME_REPLY).format(v=name),
+              rng.choice(ACKNOWLEDGEMENTS).format(v=name))]
+
+    for statement, question, answer, pool in rng.sample(REMEMBERED_FACTS,
+                                                        rng.randint(1, 3)):
+        value = rng.choice(pool)
+        facts.append((statement.format(v=value), question, answer.format(v=value),
+                      rng.choice(NEUTRAL_ACKS)))
+
+    if rng.random() < 0.4:
+        pet, pet_name = rng.choice(PETS)
+        facts.append((f"I have {pet} called {pet_name}.",
+                      rng.choice(["what pet do I have?", "do you remember my pet's name?",
+                                  "what's my pet called?"]),
+                      f"You have {pet} called {pet_name}.",
+                      rng.choice([f"{pet_name} sounds lovely.", f"Noted -- {pet_name}.",
+                                  "Got it, I'll remember that."])))
+    return facts
+
+
+def generate_session(rng):
+    """One multi-turn conversation: some facts about the user, some questions
+    about the model, and the facts asked back several turns later."""
+    turns = []
+    if rng.random() < 0.45:
+        turns += [rng.choice(GREETINGS), rng.choice(GREETING_REPLIES)]
+
+    facts = _user_facts(rng)
+    stated = []
+
+    # state the first fact early -- the recall question needs distance from it
+    statement, question, answer, acknowledgement = facts[0]
+    turns += [statement, acknowledgement]
+    stated.append((question, answer))
+
+    remaining = facts[1:]
+    for _ in range(rng.randint(2, 5)):
+        if remaining and rng.random() < 0.4:
+            statement, question, answer, acknowledgement = remaining.pop(0)
+            turns += [statement, acknowledgement]
+            stated.append((question, answer))
+        elif stated and rng.random() < 0.35:
+            question, answer = rng.choice(stated)
+            turns += [question, answer]
+        else:
+            turns += _single_exchange(rng, rng.choices(CONTEXT_FREE_KINDS,
+                                                       weights=CONTEXT_FREE_WEIGHTS)[0])
+
+    # always finish by asking something back, which is the behaviour being taught
+    question, answer = rng.choice(stated)
+    turns += [question, answer]
+
+    if rng.random() < 0.25 and len(stated) > 1:
+        turns += [rng.choice(["what do you know about me?", "can you repeat what I told you?",
+                              "what have I told you so far?", "summarise what I said"]),
+                  " ".join(answer for _, answer in stated)]
+    return conversation(*turns)
+
+
+def generate(count, seed=1337, session_fraction=0.65):
+    """Builds `count` conversations.
+
+    `session_fraction` of them are long multi-topic sessions; the rest are
+    single exchanges, so the model still answers "who made you?" correctly
+    when it is the very first thing asked with no context at all.
+    """
+    rng = random.Random(seed)
+    rows = []
+    while len(rows) < count:
+        if rng.random() < session_fraction:
+            rows.append(generate_session(rng))
+        else:
+            kind = rng.choices(CONTEXT_FREE_KINDS, weights=CONTEXT_FREE_WEIGHTS)[0]
+            turns = _single_exchange(rng, kind)
+            if rng.random() < 0.2:
+                turns = [rng.choice(GREETINGS), rng.choice(GREETING_REPLIES)] + turns
+            rows.append(conversation(*turns))
+    return rows[:count]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--out", default=None, help="where to write the JSONL")
+    parser.add_argument("--count", type=int, default=20000)
+    parser.add_argument("--seed", type=int, default=1337)
+    parser.add_argument("--preview", type=int, default=0, help="print N samples instead of writing")
+    args = parser.parse_args()
+
+    rows = generate(args.count, args.seed)
+    unique = len({json.dumps(row, sort_keys=True) for row in rows})
+
+    if args.preview or not args.out:
+        for row in rows[:args.preview or 8]:
+            for message in row["messages"]:
+                print(f"  {message['role']:>9}: {message['content']}")
+            print()
+        print(f"{len(rows):,} conversations, {unique:,} distinct ({unique/len(rows)*100:.0f}%)")
+        return
+
+    with open(args.out, "w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(f"wrote {len(rows):,} conversations to {args.out} ({unique:,} distinct)")
+
+
+if __name__ == "__main__":
+    main()
