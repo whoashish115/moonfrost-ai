@@ -58,3 +58,36 @@ LABEL_IGNORE_INDEX = -1  # matches model.py's F.cross_entropy(..., ignore_index=
 def barrier(distributed_context):
     if distributed_context.is_distributed:
         torch.distributed.barrier()
+
+
+def load_random_batch(all_input_ids, all_labels, batch_size, device, random_state):
+    """Samples `batch_size` packed rows at random.
+
+    The label shift: the data is written with labels aligned position-for-
+    position with the input (labels[i] is the token AT position i, or -1
+    where the loss should ignore it). The model's loss compares the
+    prediction made AT position i against the token at position i+1, so the
+    labels have to move one step left. Without this shift the model is
+    trained to predict the token it was just shown -- which produces a
+    beautifully low training loss and a completely useless model.
+    """
+    chosen_indices = np.sort(random_state.randint(0, all_input_ids.shape[0], size=batch_size))
+    # sorted indices keep reads roughly sequential, which matters because these arrays are
+    # memory-mapped: random access across a multi-gigabyte file is dominated by page faults
+    input_ids = torch.from_numpy(np.asarray(all_input_ids[chosen_indices], dtype=np.int64))
+    labels = torch.from_numpy(np.asarray(all_labels[chosen_indices], dtype=np.int64))
+
+    labels = torch.roll(labels, shifts=-1, dims=1)
+    labels[:, -1] = LABEL_IGNORE_INDEX  # nothing follows the last position, so it teaches nothing
+
+    if "cuda" in device:
+        input_ids = input_ids.pin_memory().to(device, non_blocking=True)
+        labels = labels.pin_memory().to(device, non_blocking=True)
+    else:
+        input_ids, labels = input_ids.to(device), labels.to(device)
+    return input_ids, labels
+
+
+def cosine_between(progress, max_learning_rate, min_learning_rate):
+    progress = min(max(progress, 0.0), 1.0)
+    return min_learning_rate + 0.5 * (1.0 + math.cos(math.pi * progress)) * (max_learning_rate - min_learning_rate)
