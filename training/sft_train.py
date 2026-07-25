@@ -91,3 +91,15 @@ def load_random_batch(all_input_ids, all_labels, batch_size, device, random_stat
 def cosine_between(progress, max_learning_rate, min_learning_rate):
     progress = min(max(progress, 0.0), 1.0)
     return min_learning_rate + 0.5 * (1.0 + math.cos(math.pi * progress)) * (max_learning_rate - min_learning_rate)
+
+
+def learning_rate_at_step(step, warmup_steps, max_steps, max_learning_rate, min_learning_rate):
+    if step < warmup_steps:
+        return max_learning_rate * (step + 1) / max(1, warmup_steps)
+    if step >= max_steps:
+        return min_learning_rate
+    progress = (step - warmup_steps) / max(1, max_steps - warmup_steps)
+    return cosine_between(progress, max_learning_rate, min_learning_rate)
+
+
+@torch.no_grad()
