@@ -113,3 +113,69 @@ def as_choices(task, row):
         return (f"{row['passage']}\nQuestion: {row['question']}?\nAnswer:",
                 [" no", " yes"], int(bool(row["answer"])))
     return None
+
+
+def run_benchmark(model, tokenizer, device, task, path, config, split, limit, shots=0):
+    from datasets import load_dataset
+
+    dataset = load_dataset(path, config, split=split) if config else load_dataset(path, split=split)
+    # MMLU ships grouped by subject, so the first N rows would all be abstract algebra
+    if task == "MMLU":
+        dataset = dataset.shuffle(seed=1337)
+    rows = list(dataset.select(range(min(limit, len(dataset)))))
+
+    # few-shot demonstrations are taken from rows that are not being scored
+    prefix = ""
+    if shots:
+        pool = list(dataset.select(range(limit, min(limit + shots * 4, len(dataset)))))
+        used = 0
+        for row in pool:
+            parsed = as_choices(task, row)
+            if not parsed:
+                continue
+            context, options, answer = parsed
+            prefix += context + options[answer] + "\n\n"
+            used += 1
+            if used == shots:
+                break
+
+    correct = correct_normalised = scored = 0
+    for row in rows:
+        parsed = as_choices(task, row)
+        if not parsed:
+            continue
+        context, options, answer = parsed
+        prompt_ids = tokenizer.encode(prefix + context).ids
+        totals, averages = [], []
+        for option in options:
+            total, average = sequence_logprob(model, prompt_ids, tokenizer.encode(option).ids, device)
+            totals.append(total)
+            averages.append(average)
+        correct += int(int(np.argmax(totals)) == answer)
+        correct_normalised += int(int(np.argmax(averages)) == answer)
+        scored += 1
+
+    return {"accuracy": correct / max(scored, 1),
+            "accuracy_length_normalised": correct_normalised / max(scored, 1),
+            "examples": scored, "shots": shots}
+
+
+def held_out_perplexity(model, device, path, block_size=1024, batches=60):
+    """Perplexity on the FineWeb-Edu validation shard, which no phase trained on."""
+    if not os.path.exists(path):
+        return None
+    data = np.memmap(path, dtype=np.uint16, mode="r")
+    usable = (len(data) // block_size) * block_size
+    generator = np.random.default_rng(0)
+    total_loss, counted = 0.0, 0
+    for _ in range(batches):
+        start = int(generator.integers(0, max(usable - block_size - 1, 1)))
+        chunk = torch.tensor(np.asarray(data[start:start + block_size + 1], dtype=np.int64),
+                             device=device)
+        inputs, targets = chunk[:-1].unsqueeze(0), chunk[1:].unsqueeze(0)
+        with torch.no_grad():
+            _, loss = model(inputs, target_token_ids=targets)
+        total_loss += float(loss)
+        counted += 1
+    mean = total_loss / max(counted, 1)
+    return {"loss": mean, "perplexity": math.exp(mean), "batches": counted, "block_size": block_size}
