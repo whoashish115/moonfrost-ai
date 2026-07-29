@@ -69,3 +69,47 @@ class HuggingFaceAdapter:
 
     def __call__(self, tokens, target_token_ids=None):
         return self.model(tokens).logits, None
+
+
+def sequence_logprob(model, prompt_ids, continuation_ids, device):
+    """Total and per-token log probability of `continuation_ids` following `prompt_ids`."""
+    ids = (prompt_ids + continuation_ids)[-1024:]
+    if len(continuation_ids) >= len(ids):
+        continuation_ids = continuation_ids[-(len(ids) - 1):]
+    tensor = torch.tensor([ids], dtype=torch.long, device=device)
+    with torch.no_grad():
+        logits, _ = model(tensor, target_token_ids=tensor)   # targets force full-sequence logits
+    log_probs = F.log_softmax(logits[0].float(), dim=-1)
+
+    total = 0.0
+    start = len(ids) - len(continuation_ids)
+    for offset, token in enumerate(continuation_ids):
+        total += log_probs[start + offset - 1, token].item()
+    return total, total / max(len(continuation_ids), 1)
+
+
+def as_choices(task, row):
+    """Normalises one row of each benchmark into (context, [options], answer index)."""
+    if task in ("ARC-Easy", "ARC-Challenge"):
+        labels = list(row["choices"]["label"])
+        texts = list(row["choices"]["text"])
+        if row["answerKey"] not in labels:
+            return None
+        return (f"Question: {row['question']}\nAnswer:",
+                [" " + text for text in texts], labels.index(row["answerKey"]))
+    if task == "PIQA":
+        return (f"Question: {row['goal']}\nAnswer:",
+                [" " + row["sol1"], " " + row["sol2"]], int(row["label"]))
+    if task == "HellaSwag":
+        return (row["ctx"], [" " + ending for ending in row["endings"]], int(row["label"]))
+    if task == "WinoGrande":
+        sentence, answer = row["sentence"], int(row["answer"]) - 1
+        before, after = sentence.split("_", 1) if "_" in sentence else (sentence, "")
+        return (before.strip(), [f" {row['option1']}{after}", f" {row['option2']}{after}"], answer)
+    if task == "MMLU":
+        return (f"Question: {row['question']}\nAnswer:",
+                [" " + str(choice) for choice in row["choices"]], int(row["answer"]))
+    if task == "BoolQ":
+        return (f"{row['passage']}\nQuestion: {row['question']}?\nAnswer:",
+                [" no", " yes"], int(bool(row["answer"])))
+    return None
