@@ -179,3 +179,98 @@ def held_out_perplexity(model, device, path, block_size=1024, batches=60):
         counted += 1
     mean = total_loss / max(counted, 1)
     return {"loss": mean, "perplexity": math.exp(mean), "batches": counted, "block_size": block_size}
+
+
+def inference_speed(model, tokenizer, device, new_tokens=80):
+    from chat_format import ChatSpecialTokens, build_prompt_token_ids
+    special = ChatSpecialTokens(tokenizer)
+    ids = build_prompt_token_ids(tokenizer, [], "Explain photosynthesis simply.", special)
+    tensor = torch.tensor([ids], dtype=torch.long, device=device)
+
+    started, produced = time.time(), 0
+    with torch.no_grad():
+        for token in model.generate_stream(tensor, max_new_tokens=new_tokens, temperature=0.0,
+                                            stop_token_ids=tuple(special.stop_ids)):
+            produced += 1
+    elapsed = max(time.time() - started, 1e-6)
+
+    first = time.time()
+    with torch.no_grad():
+        for _ in model.generate_stream(tensor, max_new_tokens=1, temperature=0.0):
+            break
+    return {"tokens": produced, "seconds": elapsed, "tokens_per_second": produced / elapsed,
+            "time_to_first_token_seconds": time.time() - first, "device": device}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ckpt", default="../checkpoints/moonfrost-777m-instruct-v2.pt")
+    parser.add_argument("--tokenizer", default="../tokenizer/tokenizer.json")
+    parser.add_argument("--val-bin", default="../transfer/val.bin")
+    parser.add_argument("--limit", type=int, default=250, help="examples per benchmark")
+    parser.add_argument("--few-shot", type=int, default=5)
+    parser.add_argument("--out", default="../docs/eval.json")
+    parser.add_argument("--skip-benchmarks", action="store_true")
+    parser.add_argument("--hf-model", default=None,
+                        help="score a transformers model instead, for a like-for-like comparison")
+    args = parser.parse_args()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    if args.hf_model:
+        adapter = HuggingFaceAdapter(args.hf_model, device)
+        model, tokenizer = adapter, adapter
+        total = sum(p.numel() for p in adapter.model.parameters())
+        info = {"step": 0, "best_val": float("nan")}
+        model_config = None
+        results = {"checkpoint": args.hf_model, "step": 0, "best_val_loss": None,
+                   "total_parameters": total, "active_parameters": total}
+    else:
+        tokenizer = Tokenizer.from_file(args.tokenizer)
+        model, model_config, info = load_for_inference(args.ckpt, device, ModelConfig, GPT)
+        results = {
+            "checkpoint": os.path.basename(args.ckpt),
+            "step": info["step"], "best_val_loss": info["best_val"],
+            "total_parameters": count_total_parameters(model_config),
+            "active_parameters": count_active_parameters_per_token(model_config),
+        }
+
+    results.update({
+        "device": torch.cuda.get_device_name(0) if device == "cuda" else "cpu",
+        "measured_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+    if not args.hf_model:
+        print("held-out perplexity...", flush=True)
+        results["pretraining_eval"] = held_out_perplexity(model, device, args.val_bin)
+        print("  ", results["pretraining_eval"], flush=True)
+
+        print("inference speed...", flush=True)
+        results["inference"] = inference_speed(model, tokenizer, device)
+        print("  ", results["inference"], flush=True)
+
+    if not args.skip_benchmarks:
+        results["benchmarks"] = {}
+        for name, path, config, split, chance in BENCHMARKS:
+            for shots in (0, args.few_shot):
+                key = f"{name}|{shots}-shot"
+                try:
+                    print(f"{key}...", flush=True)
+                    scores = run_benchmark(model, tokenizer, device, name, path, config,
+                                           split, args.limit, shots)
+                    scores["chance"] = chance
+                    results["benchmarks"][key] = scores
+                    print(f"   acc {scores['accuracy']:.3f} "
+                          f"(norm {scores['accuracy_length_normalised']:.3f}) vs chance {chance}", flush=True)
+                except Exception as error:
+                    print(f"   skipped: {type(error).__name__}: {error}", flush=True)
+                    results["benchmarks"][key] = {"error": f"{type(error).__name__}: {error}"}
+
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    with open(args.out, "w", encoding="utf-8") as handle:
+        json.dump(results, handle, indent=2)
+    print(f"\nwrote {args.out}")
+
+
+if __name__ == "__main__":
+    main()
