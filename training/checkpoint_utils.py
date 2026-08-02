@@ -150,3 +150,141 @@ def load_for_training(path):
     itself, once the parameters it belongs to are already there, so reading
     it straight to "cuda" only doubles peak VRAM for no benefit."""
     return _torch_load_tolerant(path, map_location="cpu", mmap=False)
+
+
+def strip_optimizer_state(source_path, destination_path=None, in_place=False):
+    """Writes an inference-only copy of a checkpoint: same model weights and
+    metadata, no optimizer state. Roughly a 3x size reduction, because AdamW
+    keeps two float32 buffers per parameter.
+
+    Returns (destination_path, original_bytes, new_bytes)."""
+    if destination_path is None:
+        if in_place:
+            destination_path = source_path
+        else:
+            root, extension = os.path.splitext(source_path)
+            destination_path = root + ".inference" + extension
+
+    original_bytes = os.path.getsize(source_path)
+    checkpoint = _torch_load_tolerant(source_path, map_location="cpu", mmap=True)
+    if "optimizer" not in checkpoint:
+        return destination_path, original_bytes, original_bytes
+
+    raw_config = checkpoint["model_config"]
+    if not isinstance(raw_config, dict):
+        raw_config = dataclasses.asdict(raw_config)
+    slimmed = {
+        # .clone() detaches the tensors from the memory-mapped source file, which matters when
+        # destination_path IS source_path, which would mean reading a file while overwriting it
+        "model": {key: value.clone() for key, value in checkpoint["model"].items()},
+        "step": checkpoint.get("step", 0),
+        "best_val": checkpoint.get("best_val", float("nan")),
+        "model_config": raw_config,
+        "inference_only": True,
+    }
+    del checkpoint
+    save_checkpoint_atomically(slimmed, destination_path)
+    return destination_path, original_bytes, os.path.getsize(destination_path)
+
+
+def describe_checkpoint(path):
+    """One dict per checkpoint for the model picker in the web UI: size,
+    architecture summary, training step, validation loss."""
+    from config import ModelConfig, count_active_parameters_per_token, count_total_parameters
+
+    entry = {"name": os.path.basename(path), "path": os.path.abspath(path),
+             "size_bytes": os.path.getsize(path)}
+    try:
+        metadata = load_checkpoint_metadata(path)
+    except Exception as error:
+        entry["error"] = f"{type(error).__name__}: {error}"
+        return entry
+
+    model_config = ModelConfig(**metadata["model_config"])
+    entry.update({
+        "step": metadata["step"],
+        "best_val": metadata["best_val"],
+        "has_optimizer_state": metadata["has_optimizer_state"],
+        "total_parameters": count_total_parameters(model_config),
+        "active_parameters": count_active_parameters_per_token(model_config),
+        "num_layers": model_config.num_layers,
+        "embedding_dimension": model_config.embedding_dimension,
+        "max_sequence_length": model_config.max_sequence_length,
+        "vocabulary_size": model_config.vocabulary_size,
+        "num_routed_experts": model_config.num_routed_experts,
+        # No field in the checkpoint records what it was trained for, so this reads the
+        # name. "sft" alone missed every file the pipeline actually produces, which are
+        # named chat_* and moonfrost-*-instruct.
+        "is_chat_tuned": any(marker in os.path.basename(path).lower()
+                             for marker in ("sft", "chat", "instruct")),
+    })
+    return entry
+
+
+def list_checkpoints(checkpoint_directory=CHECKPOINT_DIRECTORY_DEFAULT):
+    """Every .pt in the directory, newest first, each described."""
+    if not os.path.isdir(checkpoint_directory):
+        return []
+    paths = [os.path.join(checkpoint_directory, name)
+             for name in os.listdir(checkpoint_directory) if name.endswith(".pt")]
+    paths.sort(key=os.path.getmtime, reverse=True)
+    return [describe_checkpoint(path) for path in paths]
+
+
+def format_bytes(number_of_bytes):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if number_of_bytes < 1024 or unit == "TB":
+            return f"{number_of_bytes:.1f}{unit}"
+        number_of_bytes /= 1024
+
+
+def main():
+    argument_parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    subparsers = argument_parser.add_subparsers(dest="command", required=True)
+
+    list_parser = subparsers.add_parser("list", help="show every checkpoint with its architecture and size")
+    list_parser.add_argument("--ckpt-dir", type=str, default=CHECKPOINT_DIRECTORY_DEFAULT)
+
+    strip_parser = subparsers.add_parser("strip", help="write an inference-only copy without optimizer state")
+    strip_parser.add_argument("checkpoint")
+    strip_parser.add_argument("--out", type=str, default=None)
+    strip_parser.add_argument("--in-place", action="store_true", help="overwrite the original (atomically)")
+
+    strip_all_parser = subparsers.add_parser("strip-all", help="strip every checkpoint in the directory")
+    strip_all_parser.add_argument("--ckpt-dir", type=str, default=CHECKPOINT_DIRECTORY_DEFAULT)
+    strip_all_parser.add_argument("--in-place", action="store_true")
+
+    args = argument_parser.parse_args()
+
+    if args.command == "list":
+        entries = list_checkpoints(args.ckpt_dir)
+        if not entries:
+            print(f"no .pt checkpoints in {os.path.abspath(args.ckpt_dir)}")
+            return
+        for entry in entries:
+            if "error" in entry:
+                print(f"{entry['name']:28s} UNREADABLE: {entry['error']}")
+                continue
+            print(f"{entry['name']:28s} {format_bytes(entry['size_bytes']):>8s}  "
+                  f"{entry['total_parameters']/1e6:6.1f}M total / {entry['active_parameters']/1e6:5.1f}M active  "
+                  f"L{entry['num_layers']} d{entry['embedding_dimension']} ctx{entry['max_sequence_length']}  "
+                  f"step {entry['step']:<7d} val {entry['best_val']:.4f}"
+                  f"{'  [+optimizer state]' if entry['has_optimizer_state'] else ''}")
+        return
+
+    if args.command == "strip":
+        destination, before, after = strip_optimizer_state(args.checkpoint, args.out, args.in_place)
+        print(f"{args.checkpoint} -> {destination}: {format_bytes(before)} -> {format_bytes(after)}")
+        return
+
+    if args.command == "strip-all":
+        for entry in list_checkpoints(args.ckpt_dir):
+            if entry.get("has_optimizer_state"):
+                destination, before, after = strip_optimizer_state(entry["path"], None, args.in_place)
+                print(f"{entry['name']} -> {os.path.basename(destination)}: "
+                      f"{format_bytes(before)} -> {format_bytes(after)}")
+        return
+
+
+if __name__ == "__main__":
+    main()
