@@ -72,3 +72,56 @@ class ModelConfig:
 
     def __post_init__(self):
         assert self.num_activated_experts_per_token <= self.num_routed_experts
+
+
+MODEL_PRESETS = {
+    "tiny": ModelConfig(
+        vocabulary_size=65536, max_sequence_length=256, num_layers=4, embedding_dimension=256, num_attention_heads=4,
+        query_key_content_head_dim=48, query_key_rotary_head_dim=16, value_head_dim=48,
+        kv_compressed_latent_dim=96, query_compressed_latent_dim=0,
+        num_initial_dense_layers=1, dense_feedforward_hidden_dim=640, expert_feedforward_hidden_dim=256,
+        num_routed_experts=4, num_activated_experts_per_token=1, num_shared_experts=1,
+    ),
+    "small": ModelConfig(
+        vocabulary_size=65536, max_sequence_length=1024, num_layers=10, embedding_dimension=640, num_attention_heads=10,
+        query_key_content_head_dim=64, query_key_rotary_head_dim=32, value_head_dim=64,
+        kv_compressed_latent_dim=256, query_compressed_latent_dim=384,
+        num_initial_dense_layers=1, dense_feedforward_hidden_dim=1728, expert_feedforward_hidden_dim=576,
+        num_routed_experts=6, num_activated_experts_per_token=2, num_shared_experts=1,
+    ),
+    "base": ModelConfig(
+        vocabulary_size=65536, max_sequence_length=1536, num_layers=16, embedding_dimension=896, num_attention_heads=14,
+        query_key_content_head_dim=64, query_key_rotary_head_dim=32, value_head_dim=64,
+        kv_compressed_latent_dim=384, query_compressed_latent_dim=576,
+        num_initial_dense_layers=1, dense_feedforward_hidden_dim=2432, expert_feedforward_hidden_dim=768,
+        num_routed_experts=8, num_activated_experts_per_token=2, num_shared_experts=1,
+    ),
+    "cloud": ModelConfig(
+        vocabulary_size=65536, max_sequence_length=2048, num_layers=24, embedding_dimension=1536, num_attention_heads=24,
+        query_key_content_head_dim=64, query_key_rotary_head_dim=32, value_head_dim=64,
+        kv_compressed_latent_dim=512, query_compressed_latent_dim=1024,
+        num_initial_dense_layers=1, dense_feedforward_hidden_dim=4096, expert_feedforward_hidden_dim=1024,
+        num_routed_experts=16, num_activated_experts_per_token=4, num_shared_experts=2,
+    ),
+    "chat": ModelConfig(
+        # The run as it happened: 777M total, 161M active per token, 6B tokens of
+        # FineWeb-Edu. The 32 routed experts supply capacity while top-3 routing keeps the
+        # per-token cost near 161M, and the 32,768-token vocabulary halves what the output
+        # projection costs against a 65,536-token one.
+        vocabulary_size=32768, max_sequence_length=1024, num_layers=14, embedding_dimension=896, num_attention_heads=14,
+        query_key_content_head_dim=64, query_key_rotary_head_dim=32, value_head_dim=64,
+        kv_compressed_latent_dim=320, query_compressed_latent_dim=512,
+        num_initial_dense_layers=1, dense_feedforward_hidden_dim=2432, expert_feedforward_hidden_dim=608,
+        num_routed_experts=32, num_activated_experts_per_token=3, num_shared_experts=1,
+    ),
+    "tiny_dense": ModelConfig(
+        vocabulary_size=65536, max_sequence_length=256, num_layers=4, embedding_dimension=256, num_attention_heads=4,
+        query_key_content_head_dim=48, query_key_rotary_head_dim=16, value_head_dim=48,
+        kv_compressed_latent_dim=96, query_compressed_latent_dim=0,
+        num_initial_dense_layers=4, dense_feedforward_hidden_dim=512, expert_feedforward_hidden_dim=0,
+        num_routed_experts=0, num_activated_experts_per_token=0, num_shared_experts=0,
+    ),
+}
+
+
+@dataclass
