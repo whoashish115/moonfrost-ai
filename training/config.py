@@ -125,3 +125,47 @@ MODEL_PRESETS = {
 
 
 @dataclass
+class TrainConfig:
+    # optimization
+    max_learning_rate: float = 6e-4
+    min_learning_rate: float = 6e-5
+    warmup_steps: int = 200          # number of steps to linearly ramp the learning rate up from 0
+    weight_decay: float = 0.1
+    gradient_clip_norm: float = 1.0
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.95
+    # batching (micro_batch_size is PER GPU when running under multi-GPU DistributedDataParallel)
+    micro_batch_size: int = 16
+    gradient_accumulation_steps: int = 4
+    # effective_batch_size (in sequences) = micro_batch_size * gradient_accumulation_steps * num_gpus
+    # schedule / logging
+    max_training_steps: int = 20000   # upper bound; the wall-clock time budget (--minutes) usually stops training first
+    eval_interval_steps: int = 200
+    eval_iterations: int = 50
+    log_interval_steps: int = 10
+    checkpoint_interval_steps: int = 500
+    use_torch_compile: bool = True
+
+
+# The batch sizes below were measured on a 6GB card rather than derived from a rule of
+# thumb, because the usual rules do not apply here. Cross-entropy over the full vocabulary
+# allocates a tensor of (micro_batch_size * sequence_length, vocabulary_size) for every
+# step, and that grows with batch and sequence length almost independently of model size.
+# A small model can therefore run out of memory at a batch that looks conservative.
+TRAIN_PRESETS = {
+    "tiny": TrainConfig(micro_batch_size=16, gradient_accumulation_steps=4, max_learning_rate=1e-3, min_learning_rate=1e-4, warmup_steps=100),
+    # modified for A100:
+    "small": TrainConfig(micro_batch_size=16, gradient_accumulation_steps=2, max_learning_rate=6e-4, min_learning_rate=6e-5, warmup_steps=200),
+    # peaks at 3.75GB. A micro-batch of 2 fits in 5.12GB but leaves nothing spare for
+    # anything else on the card; halve the accumulation steps if raising it.
+    "base": TrainConfig(micro_batch_size=1, gradient_accumulation_steps=64, max_learning_rate=4e-4, min_learning_rate=4e-5, warmup_steps=300),
+    # A rented-GPU preset. It has never been made to fit on a 6GB card even at a micro-batch
+    # of 1, because AdamW's optimizer state alone needs about 4.7GB at 395M parameters.
+    "cloud": TrainConfig(micro_batch_size=6, gradient_accumulation_steps=10, max_learning_rate=3e-4, min_learning_rate=3e-5,
+                          warmup_steps=1000, max_training_steps=100000, eval_interval_steps=500, checkpoint_interval_steps=1000),
+    # 24 x 12 x 1024 = 294,912 tokens per optimizer step, sized for one 80GB H100
+    "chat": TrainConfig(micro_batch_size=24, gradient_accumulation_steps=12, max_learning_rate=6e-4,
+                         min_learning_rate=6e-5, warmup_steps=300, max_training_steps=100000,
+                         eval_interval_steps=500, eval_iterations=20, checkpoint_interval_steps=1000),
+    "tiny_dense": TrainConfig(micro_batch_size=16, gradient_accumulation_steps=4, max_learning_rate=1e-3, min_learning_rate=1e-4, warmup_steps=100),
+}
