@@ -169,3 +169,95 @@ TRAIN_PRESETS = {
                          eval_interval_steps=500, eval_iterations=20, checkpoint_interval_steps=1000),
     "tiny_dense": TrainConfig(micro_batch_size=16, gradient_accumulation_steps=4, max_learning_rate=1e-3, min_learning_rate=1e-4, warmup_steps=100),
 }
+
+
+def count_total_parameters(config: ModelConfig) -> int:
+    """Total parameters STORED in the model, including every routed expert
+    (even though only a few run per token). This is what determines how
+    much disk space a checkpoint takes and how much VRAM the optimizer's
+    per-parameter state buffers need."""
+    embedding_params = config.vocabulary_size * config.embedding_dimension
+
+    query_head_total_dim = config.query_key_content_head_dim + config.query_key_rotary_head_dim
+    if config.query_compressed_latent_dim > 0:
+        attention_params = (
+            config.embedding_dimension * config.query_compressed_latent_dim         # down-project to query latent
+            + config.query_compressed_latent_dim * (config.num_attention_heads * query_head_total_dim)  # up-project to per-head queries
+        )
+    else:
+        attention_params = config.embedding_dimension * (config.num_attention_heads * query_head_total_dim)
+    attention_params += config.embedding_dimension * (config.kv_compressed_latent_dim + config.query_key_rotary_head_dim)  # down-project to kv latent + rotary key
+    attention_params += config.kv_compressed_latent_dim * (config.num_attention_heads * (config.query_key_content_head_dim + config.value_head_dim))  # up-project to per-head keys/values
+    attention_params += (config.num_attention_heads * config.value_head_dim) * config.embedding_dimension  # output projection
+
+    def swiglu_feedforward_params(hidden_dim: int) -> int:
+        return 3 * config.embedding_dimension * hidden_dim  # gate projection, up projection, down projection
+
+    dense_feedforward_params = swiglu_feedforward_params(config.dense_feedforward_hidden_dim)
+    moe_feedforward_params = (
+        swiglu_feedforward_params(config.expert_feedforward_hidden_dim) * (config.num_routed_experts + config.num_shared_experts)
+        + config.embedding_dimension * config.num_routed_experts  # the router that picks which experts to use
+    )
+
+    num_dense_layers = min(config.num_initial_dense_layers, config.num_layers)
+    num_moe_layers = config.num_layers - num_dense_layers
+    total_params = (
+        embedding_params
+        + num_dense_layers * (attention_params + dense_feedforward_params)
+        + num_moe_layers * (attention_params + moe_feedforward_params)
+    )
+    if not config.tie_input_output_embeddings:
+        total_params += config.vocabulary_size * config.embedding_dimension
+    return total_params
+
+
+def count_active_parameters_per_token(config: ModelConfig) -> int:
+    """Parameters actually used in one forward pass for a single token: every
+    dense parameter, plus only the top-k routed experts (not the full bank)
+    and the shared experts. This is the number that determines how much
+    COMPUTE (not memory) a token costs -- the entire point of Mixture-of-
+    Experts is that this is much smaller than count_total_parameters()."""
+    embedding_params = config.vocabulary_size * config.embedding_dimension
+
+    query_head_total_dim = config.query_key_content_head_dim + config.query_key_rotary_head_dim
+    if config.query_compressed_latent_dim > 0:
+        attention_params = (
+            config.embedding_dimension * config.query_compressed_latent_dim
+            + config.query_compressed_latent_dim * (config.num_attention_heads * query_head_total_dim)
+        )
+    else:
+        attention_params = config.embedding_dimension * (config.num_attention_heads * query_head_total_dim)
+    attention_params += config.embedding_dimension * (config.kv_compressed_latent_dim + config.query_key_rotary_head_dim)
+    attention_params += config.kv_compressed_latent_dim * (config.num_attention_heads * (config.query_key_content_head_dim + config.value_head_dim))
+    attention_params += (config.num_attention_heads * config.value_head_dim) * config.embedding_dimension
+
+    def swiglu_feedforward_params(hidden_dim: int) -> int:
+        return 3 * config.embedding_dimension * hidden_dim
+
+    dense_feedforward_params = swiglu_feedforward_params(config.dense_feedforward_hidden_dim)
+    moe_feedforward_active_params = (
+        swiglu_feedforward_params(config.expert_feedforward_hidden_dim) * (config.num_activated_experts_per_token + config.num_shared_experts)
+        + config.embedding_dimension * config.num_routed_experts  # the router itself always runs in full, even though experts don't
+    )
+
+    num_dense_layers = min(config.num_initial_dense_layers, config.num_layers)
+    num_moe_layers = config.num_layers - num_dense_layers
+    total_active_params = (
+        embedding_params
+        + num_dense_layers * (attention_params + dense_feedforward_params)
+        + num_moe_layers * (attention_params + moe_feedforward_active_params)
+    )
+    if not config.tie_input_output_embeddings:
+        total_active_params += config.vocabulary_size * config.embedding_dimension
+    return total_active_params
+
+
+if __name__ == "__main__":
+    for preset_name, model_config in MODEL_PRESETS.items():
+        total = count_total_parameters(model_config)
+        active = count_active_parameters_per_token(model_config)
+        print(f"{preset_name:6s}: {total/1e6:7.1f}M total params  ({active/1e6:6.1f}M active/token)  "
+              f"layers={model_config.num_layers} (dense={model_config.num_initial_dense_layers}), "
+              f"embedding_dim={model_config.embedding_dimension}, "
+              f"experts={model_config.num_routed_experts}routed/{model_config.num_activated_experts_per_token}top-k/{model_config.num_shared_experts}shared, "
+              f"context={model_config.max_sequence_length}, vocab={model_config.vocabulary_size}")
