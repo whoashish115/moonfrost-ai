@@ -77,3 +77,57 @@ def warn(name, detail="", hint=""):
 
 def section(title):
     print(f"\n{title}")
+
+
+# ---------------------------------------------------------------- 1. imports
+
+MODULES = ["config", "model", "chat_format", "checkpoint_utils", "sft_data",
+           "ddp_utils", "train", "sft_train", "sample", "tokenizer_train",
+           "download_pretrain_data", "server", "export_to_huggingface"]
+
+OPTIONAL_MODULES = {
+    "server": "fastapi / uvicorn",
+    "cloud_run": "modal",
+    "download_pretrain_data": "datasets",
+    "export_to_huggingface": "transformers",
+}
+
+
+def test_imports():
+    section("1. module imports")
+    for module_name in MODULES + ["cloud_run"]:
+        try:
+            importlib.import_module(module_name)
+            check(f"import {module_name}", True)
+        except ImportError as error:
+            dependency = OPTIONAL_MODULES.get(module_name)
+            if dependency and dependency.split(" / ")[0] in str(error):
+                warn(f"import {module_name}", f"optional dependency missing: {dependency}",
+                     f"pip install {dependency.split(' / ')[0]}")
+            else:
+                check(f"import {module_name}", False, str(error))
+        except Exception as error:
+            check(f"import {module_name}", False, f"{type(error).__name__}: {error}")
+
+
+# ------------------------------------------------------------ 2. script --help
+
+HELP_SCRIPTS = ["train.py", "sft_train.py", "sample.py", "tokenizer_train.py",
+                "download_pretrain_data.py", "checkpoint_utils.py", "sft_data.py",
+                "server.py", "export_to_huggingface.py"]
+
+
+def test_help():
+    section("2. command-line interfaces (--help)")
+    for script in HELP_SCRIPTS:
+        completed = subprocess.run([sys.executable, script, "--help"], cwd=HERE,
+                                    capture_output=True, text=True, timeout=180)
+        ok = completed.returncode == 0
+        detail = ""
+        if not ok:
+            tail = (completed.stderr or completed.stdout).strip().splitlines()
+            detail = tail[-1] if tail else f"exit {completed.returncode}"
+        check(f"{script} --help", ok, detail)
+
+
+# ------------------------------------------------------------ 3-5. chat format
