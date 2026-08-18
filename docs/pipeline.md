@@ -270,3 +270,96 @@ when the next conversation will not fit, and `_grow()` doubles its buffer when i
 
 Packing rather than padding raised useful tokens per batch from roughly 40% to **61%**.
 **60.7% of positions in the final set are supervised.**
+
+## 7. Chat fine-tuning
+
+**`sft_train.py`** mirrors `train.py` with three differences.
+
+`load_random_batch()` selects random **rows** from the packed arrays instead of random
+offsets into a stream, and returns labels alongside inputs, since the mask is per position.
+
+The schedule runs from 2e-4 down to 2e-5, an order of magnitude below pretraining, over
+100 warmup steps. `estimate_loss()` reports loss on assistant positions only, which is why
+1.2484 is not comparable to the pretraining 2.976.
+
+The mixture is 84% smol-smoltalk, 12% `everyday-conversations` **repeated 25 times**, and
+3.3% persona data. The repeats are there because small talk is a rounding error in
+smol-smoltalk, and without them the model answered "hi" with a lecture on quantum physics.
+
+## 8. Measurement
+
+**`evaluate_model.py`**
+
+`as_choices()` turns a row of any supported benchmark into `(context, options, answer)`.
+`sequence_logprob()` scores one continuation. `run_benchmark()` scores every option for
+every question and takes the best by **total** log-probability and separately by
+**length-normalised** log-probability, reporting both, since the two disagree in a way that
+depends on how long the right answer happens to be.
+
+`HuggingFaceAdapter` wraps a `transformers` model behind the same two methods the native
+model exposes, so **the reference models are scored by exactly this code on exactly these
+examples**. Numbers copied from other people's model cards would compare harnesses as much
+as models.
+
+`held_out_perplexity()` measures on a FineWeb-Edu shard no phase trained on.
+`inference_speed()` measures generation throughput and time to first token.
+
+Results are written to `docs/eval.json`, which the About page in the chat interface reads
+directly, so what is on screen is what was last measured.
+
+## 9. Serving and export
+
+**`server.py`** is FastAPI plus SQLite. `ModelRunner` loads a checkpoint, holds the
+tokenizer, and reloads on request when the checkpoint picker changes. `/api/chat` streams
+tokens over server-sent events, pushing each id through an `IncrementalTextDecoder` and
+checking a per-generation `threading.Event` so a stop request takes effect immediately.
+Chats, messages, archive and pin flags live in SQLite; `ensure_schema()` adds columns in
+place so an old database keeps working.
+
+**`checkpoint_utils.py`** is shared by everything that touches a `.pt` file.
+`normalize_state_dict_keys()` strips `module.` and `_orig_mod.` prefixes left by
+`DistributedDataParallel` and `torch.compile`. `load_for_inference()` rebuilds the config
+from the checkpoint, constructs the model, loads the weights and puts it in eval mode.
+`strip_optimizer_state()` drops the optimiser tensors, which are two thirds of the file
+size and useless for inference.
+
+**`export_to_huggingface.py`** writes a `transformers`-loadable repository: config,
+modelling code, tokenizer and safetensors. It carries a fix worth stating, because the
+failure was silent. RoPE tables are `persistent=False` buffers, so they are not in the
+checkpoint, and `transformers` **fills any tensor it does not find with zeros** instead of
+running `__init__`. Zero cosine and sine erase position entirely: the exported model
+answered `"made made made made"` while the same weights answered correctly through the
+native path. The exporter now marks those buffers persistent and writes them into the
+safetensors file, so a regression shows up as missing keys rather than as nonsense.
+
+**`cloud_run.py`** defines the Modal app. Each stage is a function with a GPU type, a
+timeout and a cost estimate, and the module **refuses to import** if any account's
+worst-case bill exceeds its cap. Jobs are launched with `.spawn()` rather than `.remote()`,
+because a blocking call keeps a client connection open and the job dies with the terminal;
+one run was lost that way 1,730 steps in.
+
+---
+
+## Reading the code in order
+
+```
+config.py            the numbers
+   ↓
+model.py             the architecture
+   ↓
+train.py             pretraining
+   ↓
+sft_data.py          how a conversation becomes a row
+   ↓
+sft_train.py         chat tuning
+   ↓
+evaluate_model.py    how the numbers were measured
+   ↓
+server.py            how it is served
+
+cloud_run.py         how all of the above was run on rented GPUs
+```
+
+`training/tests/verify_all.py` runs 40 checks on the model and data path, and
+`verify_cloud_run.py` runs 17 on the training plan and the budget, before anything paid
+starts.
