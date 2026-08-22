@@ -55,3 +55,57 @@ class ChatSpecialTokens:
         next message instead of stopping -- cutting there is much better
         than showing the hallucinated dialogue."""
         return {self.end_of_text, self.user}
+
+
+def build_prompt_token_ids(tokenizer, conversation_history, new_message, special_tokens,
+                           system_prompt=None, max_prompt_tokens=None):
+    """Turns a conversation into the exact token-id sequence the model
+    expects, ending with <|assistant|> so the model's next token starts the
+    reply.
+
+    conversation_history is a list of (role, text) turns, oldest first.
+
+    If max_prompt_tokens is given and the conversation is longer than that,
+    the OLDEST turns are dropped first -- the same policy sft_prepare.py
+    used when packing training rows, so the model sees a shape it was
+    trained on. The newest user message and the system prompt are always
+    kept, even if that alone exceeds the budget (in which case the message
+    itself is truncated from the left as a last resort).
+    """
+    def encode(text):
+        return tokenizer.encode(text.strip()).ids
+
+    system_token_ids = []
+    if system_prompt and special_tokens.system is not None:
+        system_token_ids = [special_tokens.system] + encode(system_prompt)
+
+    # encode each history turn as a self-contained block so whole turns can be dropped
+    history_blocks = []
+    for role, text in conversation_history:
+        if role == "user":
+            history_blocks.append([special_tokens.user] + encode(text) + [special_tokens.assistant])
+        else:
+            history_blocks.append(encode(text) + [special_tokens.end_of_text])
+
+    current_turn = [special_tokens.user] + encode(new_message) + [special_tokens.assistant]
+
+    if max_prompt_tokens is not None:
+        budget_for_history = max_prompt_tokens - len(system_token_ids) - len(current_turn)
+        while history_blocks and sum(len(block) for block in history_blocks) > budget_for_history:
+            history_blocks.pop(0)
+        if budget_for_history < 0:
+            # even the newest message alone doesn't fit: keep its tail, plus the closing
+            # <|assistant|> so the model still knows it's being asked to reply
+            room = max_prompt_tokens - len(system_token_ids) - 2
+            if room > 0:
+                current_turn = [special_tokens.user] + current_turn[1:-1][-room:] + [special_tokens.assistant]
+            history_blocks = []
+
+    token_ids = list(system_token_ids)
+    for block in history_blocks:
+        token_ids += block
+    token_ids += current_turn
+    return token_ids
+
+
+REPLACEMENT_CHARACTER = "�"
