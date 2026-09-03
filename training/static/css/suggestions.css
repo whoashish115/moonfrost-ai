@@ -1,0 +1,49 @@
+/* ---------------- prompt suggester ---------------- */
+.suggest-box {
+  position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; z-index: 20;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 5px 17px rgba(0,0,0,.15); padding: 6px; overflow: hidden;
+}
+.suggest-box[hidden] { display: none; }
+.suggest-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px 8px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-faint); font-weight: 700;
+}
+/* Chips that wrap, rather than one per row: six suggestions as a vertical list is a wall
+   that covers the conversation, while the same six as tags read at a glance and take two
+   lines. Each keeps its category as a quiet suffix. */
+.suggest-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 4px 4px; }
+.suggest-item {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+  padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-sunken); font-size: 13px; color: var(--text); text-align: left;
+  transition: background-color .12s, border-color .12s, transform .12s;
+}
+.suggest-item:hover, .suggest-item.on {
+  background: var(--hover-surface); border-color: var(--border-strong); transform: translateY(-1px);
+}
+.suggest-item .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-item .tag {
+  flex: none; font-size: 10px; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.suggest-item .icon { display: none; }
+#composer { position: relative; }
+.attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 4px 0; }
+.attachments[hidden] { display: none; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 240px;
+  padding: 6px 10px; border-radius: 999px; background: var(--bg-sunken);
+  border: 1px solid var(--border); font-size: 12px; color: var(--text);
+}
+.file-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip .size { color: var(--text-faint); flex: none; }
+.file-chip button { color: var(--text-faint); display: grid; place-items: center; }
+.file-chip button:hover { color: var(--danger); }
+/* In the transcript the same chip is shown read-only, so a sent message reads as
+   "this file" rather than repeating its whole contents back at you. */
+.msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.msg.user .msg-files { justify-content: flex-end; }
+
+.msg-time { color: var(--text-faint); }
