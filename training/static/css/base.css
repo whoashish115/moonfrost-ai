@@ -1,0 +1,115 @@
+/* ---------------------------------------------------------------
+   Everything is inline on purpose: this page is served from a local
+   machine that may have no internet connection, and the previous
+   version pulled Tailwind and two Google Fonts from CDNs -- offline,
+   that produced an unstyled white page.
+   --------------------------------------------------------------- */
+:root {
+  /* Streamlit's light theme: a white canvas, a pale grey sidebar, and its coral
+     primary. The greys are the ones Streamlit ships, not approximations. */
+  --bg: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #f0f2f6;
+  --sidebar-bg: #e8ecf4;
+  --bg-rgb: 255, 255, 255;
+  --border: #e6eaf1;
+  --border-strong: #d5dae5;
+  --text: #31333f;
+  --text-muted: #626977;
+  --text-faint: #8b909e;
+  --accent: #ff4b4b;
+  --accent-hover: #ff2b2b;
+  --accent-soft: #fff0f0;
+  --danger: #d0453b;
+  --success: #2f855a;
+  --code-bg: #1e1f26;
+  --code-text: #e6e6ec;
+  /* Streamlit barely uses shadow; borders carry the separation instead. */
+  --shadow: 0 1px 2px rgba(0,0,0,.06);
+  /* One radius for the whole interface. Streamlit uses 0.5rem and almost nothing else. */
+  --radius: 14px;  --accent-gradient: linear-gradient(135deg, #c2428f, #c2428f);
+  --on-accent: #ffffff;
+
+  --sidebar-width: 264px;
+      --tint: transparent;
+  /* Source Sans is the face Streamlit ships; the rest of the stack is the usual fallback. */
+  --font: "Source Sans 3", "Source Sans Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "SF Mono", "Cascadia Mono", "Consolas", "Liberation Mono", Menlo, monospace;
+}
+html[data-theme="dark"] {
+  /* Near-black and close to neutral. The surfaces still step apart enough to read as
+     separate panels, but they carry almost no hue of their own, which leaves the
+     accent the only real colour in the interface. */
+  /* Near-black, with each surface a clear step apart rather than three shades of the
+     same grey. Text runs to pure white so the contrast ratio against the page is about
+     19:1, well past the 7:1 that counts as high contrast. */
+  --bg: #050609;
+  --bg-elevated: #14161d;
+  --bg-sunken: #0d0f15;
+  --sidebar-bg: #0a0b10;
+  --bg-rgb: 5, 6, 9;
+  --border: #23262f;
+  --border-strong: #3d414d;
+  --text: #ffffff;
+  --text-muted: #b4b9c6;
+  --text-faint: #868c9a;  --accent: #ff4b4b;
+  --accent-hover: #ff6c6c;
+  --accent-soft: #2b1f22;
+  --danger: #f0736a;
+  --success: #5bbd8a;
+  --code-bg: #101115;
+  --code-text: #dfe1e8;
+  --shadow: 0 1px 3px rgba(0,0,0,.45);
+}
+
+* { box-sizing: border-box; }
+/* overflow:hidden on the ROOT element as well as body: the closed settings drawer sits just
+   past the right edge of the layout, and without this the document itself becomes
+   horizontally scrollable. The browser then scrolls sideways to bring a focused control into
+   view, dragging the whole app off-screen -- which looked like "the settings button does
+   nothing" because the click landed on empty space. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* The root element carries the theme colour as well as the body, so nothing can show a
+   strip of the browser's own white canvas during a reflow. */
+html { background: var(--bg); }
+body {
+  margin: 0; font-family: var(--font); font-size: 15px; line-height: 1.6;
+  background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column;
+}
+/* The top bar runs the full width and the sidebar starts below it, so the sidebar never
+   covers the toggle that opens it -- and the toggle stays in the same place whether the
+   sidebar is open or shut. */
+#layout { flex: 1; display: flex; min-height: 0; }
+button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+input, textarea, select { font: inherit; color: inherit; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: content-box; }
+
+.icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.icon-sm { width: 15px; height: 15px; }
+
+/* A fixed layer behind everything, holding a few large blurred colour blobs that drift
+   slowly. Blurring a handful of radial gradients is far cheaper than animating a real
+   gradient, and it survives any window size because every position is a percentage. */
+#chat-scroll { background-image: none; }
+
+/* the photo carries its own dimming, so the scrim would double-darken it */
+html[data-backdrop="none"] #chat-scroll,
+
+html:not([data-backdrop="photo"]) 
+
+
+
+
+
+
+
+
+/* Both halves of the dimming follow the same slider, so it runs continuously from "the
+   full photograph" to "no picture at all" with nothing fixed in between. The veil was a
+   flat 0.78 before, which meant 0 on the slider still could not show the image properly. */
