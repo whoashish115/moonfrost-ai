@@ -24,97 +24,10 @@
 <link rel="stylesheet" href="/static/css/dialog.css">
 <link rel="stylesheet" href="/static/css/attachments.css">
 <link rel="stylesheet" href="/static/css/suggestions.css">
+<link rel="stylesheet" href="/static/css/feedback.css">
+<link rel="stylesheet" href="/static/css/voice.css">
+<link rel="stylesheet" href="/static/css/mark.css">
 <style>
-.thinking { display: flex; align-items: center; gap: 9px; color: var(--text-muted); font-size: 13px; }
-.spinner {
-  width: 16px; height: 16px; border-radius: 50%; flex: none;
-  border: 2px solid var(--border-strong); border-top-color: var(--accent);
-  animation: spin .7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
-
-/* ---------------- ripple ---------------- */
-/* Material's touch ripple, as about fifteen lines of CSS. MUI itself is a React component
-   library and this app is plain JavaScript, so pulling it in would mean rewriting the whole
-   interface; the ripple is the part that actually shows, and it works the same here. */
-/* isolation keeps the ink behind the row's own content without needing a stacking
-   context on every child, and contain:paint clips it without affecting layout. */
-.ripple-host { position: relative; overflow: hidden; isolation: isolate; }
-.ripple-ink {
-  position: absolute; border-radius: 50%; transform: scale(0); pointer-events: none;
-  background: currentColor; opacity: .28; animation: ripple-out .5s ease-out forwards;
-}
-@keyframes ripple-out { to { transform: scale(2.2); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .ripple-ink { animation: none; display: none; } }
-/* Dictation gets its own surface rather than a blinking button: while it is listening the
-   words arrive here first, so you can see what was heard before it reaches the composer. */
-#voice-panel {
-  position: fixed; inset: 0; z-index: 60; display: none;
-  align-items: center; justify-content: center; padding: 20px;
-  background: rgba(0,0,0,.45);
-}
-#voice-panel.show { display: flex; }
-.voice-card {
-  width: min(460px, 100%); background: var(--bg-elevated); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 26px 24px 20px; text-align: center;
-  display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow);
-}
-.voice-title { font-size: 16px; font-weight: 650; }
-.voice-status { font-size: 12.5px; color: var(--text-muted); }
-.voice-wave { display: flex; align-items: center; justify-content: center; gap: 4px; height: 52px; }
-.voice-wave i {
-  display: block; width: 4px; height: 12px; border-radius: 4px; background: var(--accent);
-  animation: voice-bar 1s ease-in-out infinite;
-}
-.voice-wave i:nth-child(1) { animation-delay: 0s; }
-.voice-wave i:nth-child(2) { animation-delay: .1s; }
-.voice-wave i:nth-child(3) { animation-delay: .2s; }
-.voice-wave i:nth-child(4) { animation-delay: .3s; }
-.voice-wave i:nth-child(5) { animation-delay: .4s; }
-.voice-wave i:nth-child(6) { animation-delay: .5s; }
-.voice-wave i:nth-child(7) { animation-delay: .6s; }
-@keyframes voice-bar { 0%, 100% { height: 10px; opacity: .45; } 50% { height: 40px; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .voice-wave i { animation: none; height: 22px; } }
-.voice-text {
-  min-height: 66px; max-height: 160px; overflow-y: auto; text-align: left;
-  background: var(--bg-sunken); border-radius: var(--radius); padding: 12px 14px;
-  font-size: 14px; line-height: 1.55; color: var(--text);
-}
-.voice-text:empty::before { content: "Say something..."; color: var(--text-faint); }
-.voice-text .pending { color: var(--text-muted); font-style: italic; }
-.voice-actions { display: flex; gap: 10px; }
-.voice-actions button {
-  flex: 1; padding: 10px; border-radius: var(--radius); font-size: 13.5px; font-weight: 600;
-  border: 1px solid var(--border-strong); color: var(--text-muted); transition: all .14s;
-}
-.voice-actions button:hover { border-color: var(--text-faint); color: var(--text); }
-.voice-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.voice-actions button.primary:hover { background: var(--accent-hover); }
-/* While a reply streams the cat dozes: the mark itself becomes the loader rather than a
-   separate spinner appearing beside it. */
-.avatar img { display: block; }
-/* The artwork is wider than it is tall, so height drives the size and width follows;
-   forcing a square would letterbox it or crop the tail. */
-.logo-cat { height: 100%; width: auto; object-fit: contain; display: block; }
-.avatar .logo-cat { height: 32px; }
-.empty-mark .logo-cat { height: 92px; }
-.avatar.loading .logo-cat { animation: cat-doze 1.6s ease-in-out infinite; }
-@keyframes cat-doze {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.07); opacity: .7; }
-}
-@media (prefers-reduced-motion: reduce) { .avatar.loading .logo-cat { animation: none; } }
-.composer-hint { display: flex; align-items: center; gap: 10px; padding: 7px 4px 0; font-size: 11.5px; color: var(--text-faint); flex-wrap: wrap; }
-.toggle-chip { display: flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border); font-size: 11.5px; transition: all .12s; }
-.context-usage { font-size: 11.5px; padding: 3px 9px; border-radius: 20px; background: var(--bg-sunken); color: var(--text-muted); white-space: nowrap; }
-.context-usage.warn { background: #fdf0e3; color: #9a5b12; }
-html[data-theme="dark"] .context-usage.warn { background: #3a2a12; color: #f0b968; }
-.context-usage.full { background: #fdeaea; color: var(--danger); }
-html[data-theme="dark"] .context-usage.full { background: #3a1e1c; color: var(--danger); }
-.toggle-chip:hover { border-color: var(--border-strong); color: var(--text); }
-.toggle-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-#btn-archive-view.on { background: var(--accent-soft); color: var(--accent); }
 /* A centred dialog with a tab rail, rather than a drawer: the settings had grown past
    what one scrolling column can present, and a knob nobody can find is a knob nobody
    uses. */
