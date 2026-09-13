@@ -1,0 +1,52 @@
+/* ---------------- dialog ---------------- */
+#dialog-backdrop {
+  position: fixed; inset: 0; z-index: 90; display: none;
+  align-items: center; justify-content: center; padding: 24px;
+  background: rgba(0,0,0,.45);
+}
+#dialog-backdrop.open { display: flex; }
+.dialog-card {
+  width: min(420px, 100%); background: var(--bg-elevated);
+  border: 1px solid var(--border); border-radius: 16px; padding: 22px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.4); display: flex; flex-direction: column; gap: 12px;
+  animation: dialog-in .16s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dialog-card { animation: none; } }
+.dialog-title { font-size: 16px; font-weight: 650; }
+.dialog-body { font-size: 13.5px; color: var(--text-muted); line-height: 1.55; }
+.dialog-input {
+  width: 100%; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border-strong); background: var(--bg-sunken);
+  color: var(--text); font-size: 14px; outline: none;
+}
+.dialog-input:focus { border-color: var(--accent); }
+.dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+.dialog-actions button {
+  padding: 9px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
+  border: 1px solid var(--border-strong); color: var(--text-muted);
+  transition: background-color .14s, color .14s, border-color .14s;
+}
+.dialog-actions button:hover { background: var(--hover-surface); color: var(--text); }
+.dialog-actions button.primary {
+  background: var(--accent-gradient); border-color: transparent; color: var(--on-accent);
+}
+.dialog-actions button.primary:hover { filter: brightness(1.08); }
+.dialog-actions button.danger-action {
+  background: var(--danger); border-color: transparent; color: #fff;
+}
+.dialog-actions button.danger-action:hover { filter: brightness(1.08); }
+
+/* A queued message is shown straight away but marked as waiting, so it is obvious it has
+   not reached the model yet. */
+.msg.queued .msg-body { opacity: .55; border: 1px dashed var(--border-strong); }
+.queued-tag {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+  color: var(--text-faint); margin-top: 3px;
+}
+.queued-tag::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-faint); animation: queued-blink 1.4s ease-in-out infinite;
+}
+@keyframes queued-blink { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .queued-tag::before { animation: none; } }

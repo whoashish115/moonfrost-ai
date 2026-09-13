@@ -1,0 +1,45 @@
+/* ---------------- voice input panel ---------------- */
+/* Dictation gets its own surface rather than a blinking button: while it is listening the
+   words arrive here first, so you can see what was heard before it reaches the composer. */
+#voice-panel {
+  position: fixed; inset: 0; z-index: 60; display: none;
+  align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0,0,0,.45);
+}
+#voice-panel.show { display: flex; }
+.voice-card {
+  width: min(460px, 100%); background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 26px 24px 20px; text-align: center;
+  display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow);
+}
+.voice-title { font-size: 16px; font-weight: 650; }
+.voice-status { font-size: 12.5px; color: var(--text-muted); }
+.voice-wave { display: flex; align-items: center; justify-content: center; gap: 4px; height: 52px; }
+.voice-wave i {
+  display: block; width: 4px; height: 12px; border-radius: 4px; background: var(--accent);
+  animation: voice-bar 1s ease-in-out infinite;
+}
+.voice-wave i:nth-child(1) { animation-delay: 0s; }
+.voice-wave i:nth-child(2) { animation-delay: .1s; }
+.voice-wave i:nth-child(3) { animation-delay: .2s; }
+.voice-wave i:nth-child(4) { animation-delay: .3s; }
+.voice-wave i:nth-child(5) { animation-delay: .4s; }
+.voice-wave i:nth-child(6) { animation-delay: .5s; }
+.voice-wave i:nth-child(7) { animation-delay: .6s; }
+@keyframes voice-bar { 0%, 100% { height: 10px; opacity: .45; } 50% { height: 40px; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .voice-wave i { animation: none; height: 22px; } }
+.voice-text {
+  min-height: 66px; max-height: 160px; overflow-y: auto; text-align: left;
+  background: var(--bg-sunken); border-radius: var(--radius); padding: 12px 14px;
+  font-size: 14px; line-height: 1.55; color: var(--text);
+}
+.voice-text:empty::before { content: "Say something..."; color: var(--text-faint); }
+.voice-text .pending { color: var(--text-muted); font-style: italic; }
+.voice-actions { display: flex; gap: 10px; }
+.voice-actions button {
+  flex: 1; padding: 10px; border-radius: var(--radius); font-size: 13.5px; font-weight: 600;
+  border: 1px solid var(--border-strong); color: var(--text-muted); transition: all .14s;
+}
+.voice-actions button:hover { border-color: var(--text-faint); color: var(--text); }
+.voice-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.voice-actions button.primary:hover { background: var(--accent-hover); }

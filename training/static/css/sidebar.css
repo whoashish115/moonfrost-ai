@@ -1,0 +1,182 @@
+/* ---------------- sidebar ---------------- */
+#sidebar {
+  width: var(--sidebar-width); flex: none; background: var(--sidebar-bg);
+  display: flex; flex-direction: column; min-height: 0;
+  transition: margin-left .22s ease;
+}
+#sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-width)); }
+
+/* Below 820 the sidebar stops taking layout space and becomes a drawer over the chat.
+   The backdrop only exists at that width; on a desktop the sidebar sits in the flow and
+   there is nothing to dismiss. */
+/* A tiled paw, flat grey and barely there, in the manner of WhatsApp's doodles. The two
+   files are the same tile inked dark and light, so each theme gets one that sinks into its
+   own background instead of one image fighting both. */
+#main {
+  background-image: url("/static/cats/paw-light.png");
+  background-repeat: repeat;
+  background-size: 300px 300px;
+}
+html[data-theme="dark"] #main {
+  background-image: url("/static/cats/paw-dark.png");
+}
+/* the scroller sits on the pattern rather than covering it */
+#chat-scroll { background: none; }
+
+#drawer-backdrop {
+  position: fixed; inset: 0; z-index: 24; background: rgba(0,0,0,.45);
+  opacity: 0; pointer-events: none; transition: opacity .22s;
+}
+@media (max-width: 820px) {
+  #drawer-backdrop.show { opacity: 1; pointer-events: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sidebar, #drawer-backdrop { transition: none; }
+}
+.sidebar-head { padding: 8px 8px 6px; display: flex; flex-direction: column; gap: 6px; }
+.new-chat-btn { border-radius: 999px !important; }
+.new-chat-btn {
+  display: flex; align-items: center; gap: 7px; justify-content: center;
+  background: var(--accent-gradient); color: var(--on-accent); padding: 9px 14px;
+  border-radius: var(--radius); font-weight: 600; font-size: 14px; transition: background .15s;
+}
+.new-chat-btn:hover { background: var(--accent-hover); }
+.search-box { position: relative; }
+.search-box .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-faint); }
+#session-search {
+  width: 100%; padding: 8px 10px 8px 32px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-elevated); outline: none; font-size: 13.5px;
+}
+#session-search:focus { border-color: var(--accent); }
+#session-search { border-radius: 999px !important; }
+.section-label { padding: 6px 12px 3px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+#session-list { flex: 1; overflow-y: auto; padding: 2px 7px 10px; display: flex; flex-direction: column; gap: 1px; }
+/* A quiet outline that only appears on hover and stays on the selected row: enough to
+   separate one conversation from the next without turning the list into a stack of boxes.
+   The fill is neutral on purpose -- washing every hovered row in the accent made the
+   sidebar flash colour as the pointer crossed it. */
+.session-item {
+  display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid transparent; cursor: pointer; color: var(--text-muted); font-size: 13px;
+  line-height: 1.45;
+  /* Barely a tint: enough to separate a row from the sidebar, far enough below the hover
+     and selected states that neither loses its meaning. */
+  background: color-mix(in srgb, var(--text) 1.8%, transparent);
+  /* Pinned so the row cannot change size for any reason: not when it becomes the selected
+     one, not when the menu button fades in, not when a title is long enough to wrap. */
+  height: 36px; min-height: 36px; overflow: hidden;
+  transition: background .16s ease, color .16s ease, border-color .16s ease;
+}
+/* Hover is a neutral step up in surface. The brand gradient is reserved for the things
+   that actually are the primary action -- New chat, Send, the mark -- so a chat row or a
+   dropdown does not take on the accent just because the pointer crossed it. */
+.session-item, .icon-btn, .empty-chip, .reset-btn, .account-row, .row-actions button,
+.msg-actions button, .mic-btn, .account-menu button, #model-select {
+  transition: background-color .16s ease, color .16s ease, border-color .16s ease;
+}
+.session-item:hover, .icon-btn:hover, .empty-chip:hover, .reset-btn:hover,
+.account-row:hover, .row-actions button:hover, .msg-actions button:hover,
+.mic-btn:hover, .account-menu button:hover, #model-select:hover {
+  background-color: var(--hover-surface);
+  color: var(--text);
+}
+
+.session-item:hover { background-color: var(--bg-elevated); color: var(--text); }
+html[data-theme="dark"] .session-item:hover { background: var(--bg-sunken); }
+.session-item.active { background: var(--bg-elevated); color: var(--text); }
+html[data-theme="dark"] .session-item.active { background: var(--bg-sunken); }
+.session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The button is always laid out and only fades in, so the title has the same width
+   whether or not the pointer is over the row. */
+.row-menu-btn {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--text-faint); opacity: 0; transition: opacity .14s, background-color .14s;
+}
+.session-item:hover .row-menu-btn, .session-item.active .row-menu-btn { opacity: 1; }
+.row-menu-btn:hover { background: var(--hover-surface); color: var(--text); }
+
+.row-menu {
+  position: fixed; z-index: 60; min-width: 150px; padding: 5px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.32);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.row-menu button {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px;
+  font-size: 13px; color: var(--text-muted); text-align: left; transition: background-color .14s, color .14s;
+}
+.row-menu button:hover { background: var(--hover-surface); color: var(--text); }
+.row-menu button.danger:hover { color: var(--danger); }
+/* A pinned row keeps a small marker so the reason it is at the top is visible without
+   opening the menu, and the pinned block is separated by a label rather than a rule. */
+.pin-mark {
+  flex: none; width: 12px; height: 12px; color: var(--text-faint);
+  stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+/* A pinned chat sits in its own block above the rest, so the two labels are real section
+   headings rather than a hint attached to a row. */
+.list-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 12px 5px; font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.list-label:first-child { padding-top: 2px; }
+.list-label .pin-mark { width: 11px; height: 11px; }
+.list-label + .session-item { margin-top: 0; }
+/* a hairline under the pinned block, so the break between the two is visible even when
+   the second label scrolls out of view */
+.list-divider { height: 1px; margin: 8px 10px 2px; background: var(--border); }
+.session-item:hover .row-actions, .session-item.active .row-actions { opacity: 1; }
+.row-actions button { padding: 3px; border-radius: 5px; color: var(--text-faint); }
+.row-actions button { border-radius: 9px; }
+.row-actions button:hover { background: var(--bg-sunken); color: var(--text); }
+.row-actions button.danger:hover { color: var(--danger); }
+.session-rename-input { flex: 1; background: var(--bg); border: 1px solid var(--accent); border-radius: 5px; padding: 3px 6px; outline: none; font-size: 13.5px; min-width: 0; }
+
+/* ---------------- main ---------------- */
+/* overflow:hidden clips the off-canvas settings drawer while it is closed; when open it
+   translates fully back inside this box, so nothing needed is ever clipped */
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; overflow: hidden; }
+/* ---------------- sidebar brand and account ---------------- */
+/* The brand is the only thing on this row now that the collapse button has moved to the
+   corner, so it is centred and given room to breathe rather than pinned to the left edge. */
+.sidebar-brand {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 18px 12px 14px;
+}
+.sidebar-foot { padding: 8px; border-top: 1px solid var(--border); }
+/* One row: the account. Everything else lives behind it, which is what every assistant
+   interface does -- three icons crammed along the bottom edge read as a toolbar. */
+.account-row {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 10px; color: var(--text); font-size: 13.5px; font-weight: 600;
+  transition: background .14s;
+}
+.account-row:hover { background: var(--bg-elevated); }
+.account-row .badge { margin-left: auto; }
+.account-row .avatar { width: 34px; height: 34px; font-size: 14px; border-radius: 50%; }
+/* text-align matters here: the element is a flex child with flex:1, so without it the
+   name centres itself in whatever space is left instead of sitting against the avatar. */
+.account-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A popup above the row, not a list under it. Note the [hidden] rule: a CSS display
+   declaration overrides the hidden attribute, so without it the menu was permanently open
+   and looked like four extra items bolted to the bottom of the sidebar. */
+.account-menu {
+  position: absolute; bottom: calc(100% + 6px); left: 8px; right: 8px; z-index: 30;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.28);
+}
+.account-menu[hidden] { display: none; }
+.sidebar-foot { position: relative; }
+.account-menu button {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px; border-radius: 8px;
+  font-size: 13px; color: var(--text-muted); text-align: left; transition: background-color .14s, color .14s;
+}
+.menu-label {
+  padding: 6px 10px 4px; font-size: 10px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.account-menu .space.on { color: var(--text); font-weight: 620; }
+.account-menu .space .count { margin-left: auto; font-size: 11px; color: var(--text-faint); }
+.account-menu button:hover { background: var(--bg-elevated); color: var(--text); }

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Moonfrost</title>
+<meta name="description" content="Moonfrost: a 777M-parameter Mixture-of-Experts language model running locally.">
+<meta name="theme-color" content="#c2428f">
+<link rel="icon" href="/static/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+<link rel="manifest" href="/static/icons/site.webmanifest">
+<!-- One display face, for the wordmark only. If it fails to load the stack falls back to
+     the interface font and the bar still reads correctly, just less distinctively. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/base.css">
+<link rel="stylesheet" href="/static/css/sidebar.css">
+<link rel="stylesheet" href="/static/css/controls.css">
+<link rel="stylesheet" href="/static/css/chat.css">
+<link rel="stylesheet" href="/static/css/composer.css">
+<link rel="stylesheet" href="/static/css/dialog.css">
+<link rel="stylesheet" href="/static/css/attachments.css">
+<link rel="stylesheet" href="/static/css/suggestions.css">
+<link rel="stylesheet" href="/static/css/feedback.css">
+<link rel="stylesheet" href="/static/css/voice.css">
+<link rel="stylesheet" href="/static/css/mark.css">
+<link rel="stylesheet" href="/static/css/settings.css">
+<link rel="stylesheet" href="/static/css/about.css">
+<link rel="stylesheet" href="/static/css/responsive.css">
+</head>
+<body>
+
+<svg style="display:none">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 8.5l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 3.6V3a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 15.5 4.6l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5a3 3 0 0 0-6 0 3 3 0 0 0-1 5.8A3 3 0 0 0 7 16a3 3 0 0 0 5 2M12 5a3 3 0 0 1 6 0 3 3 0 0 1 1 5.8A3 3 0 0 1 17 16a3 3 0 0 1-5 2M12 5v13"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <!-- The Moonfrost mark: four dots on a 2x2 grid. It doubles as the loading
+       indicator -- the same four dots, pulsing in sequence. -->
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M3 8h3a2 2 0 0 0 2-2V3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M21 16h-3a2 2 0 0 0-2 2v3"/></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+<!--
+  The Moonfrost cats. Drawn as symbols rather than shipped as images so they inherit the
+  theme: every body uses currentColor, so a cat is whatever colour its container is, and
+  the outline is its own token. That keeps one file working in light, dark and all fifteen
+  palettes without a second asset.
+
+  Stroke widths assume a 120x120 viewBox and are scaled for the size each is used at.
+-->
+
+<!-- the logo: a cat curled up asleep, tail wrapped round, one white paw tucked in -->
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9A2 2 0 0 1 15 10.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-logo" viewBox="0 0 24 24">
+    <circle cx="8.5" cy="8.5" r="3" fill="currentColor" stroke="none"/>
+    <circle cx="15.5" cy="8.5" r="3" fill="currentColor" stroke="none"/>
+    <circle cx="8.5" cy="15.5" r="3" fill="currentColor" stroke="none"/>
+    <circle cx="15.5" cy="15.5" r="3" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 2 2 0 0 0 1.5-3.3 2 2 0 0 1 1.5-3.3H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/><circle cx="7.5" cy="12" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="15" cy="8" r="1"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+</svg>
+
+
+<div id="layout">
+<aside id="sidebar">
+  <div class="sidebar-brand">
+    <a class="brand" href="/home" target="_blank" rel="noopener"
+       title="Moonfrost, 777M, trained from scratch. Opens the project page.">
+      <span class="brand-mark"><img class="brand-cat" src="/static/cats/logo.png" alt="" draggable="false"></span>
+      <span class="brand-name">Moonfrost</span>
+    </a>
+  </div>
+  <div class="sidebar-head">
+    <button class="new-chat-btn" id="btn-new"><svg class="icon icon-sm"><use href="#i-plus"/></svg>New chat</button>
+    <div class="search-box">
+      <svg class="icon icon-sm"><use href="#i-search"/></svg>
+      <input id="session-search" type="text" placeholder="Search chats" autocomplete="off">
+    </div>
+  </div>
+  <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+    <span id="section-label">Chats</span>
+    <button class="icon-btn" id="btn-archive-view" title="Show archived chats" style="padding:4px"><svg class="icon icon-sm"><use href="#i-archive"/></svg></button>
+  </div>
+  <div id="session-list"></div>
+
+  <div class="sidebar-foot">
+    <button class="account-row" id="btn-account">
+      <span class="avatar user" id="account-avatar"></span>
+      <span class="account-name" id="account-name">You</span>
+      <svg class="icon icon-sm"><use href="#i-dots"/></svg>
+    </button>
+    <div class="account-menu" id="account-menu" hidden>
+      <div class="menu-label">Spaces</div>
+      <div id="workspace-list"></div>
+      <button data-account="new-space"><svg class="icon icon-sm"><use href="#i-plus"/></svg>New space</button>
+    </div>
+  </div>
+</aside>
+
+<main id="main">
+
+  <div class="chat-float">
+    <button class="icon-btn float-menu" id="btn-sidebar" title="Show or hide the sidebar"><svg class="icon"><use href="#i-menu"/></svg></button>
+    <!-- autocomplete=off stops the browser restoring a stale selection across reloads, which
+         would otherwise fire a change event and reload a multi-gigabyte checkpoint for nothing -->
+    <select id="model-select" title="Checkpoint to chat with" autocomplete="off"></select>
+    <button class="icon-btn float-btn" id="btn-settings" title="Settings"><svg class="icon"><use href="#i-settings"/></svg></button>
+    <button class="icon-btn float-btn" id="btn-theme" title="Toggle light and dark"><svg class="icon"><use href="#i-moon"/></svg></button>
+    <button class="icon-btn float-btn" id="btn-about" title="About this model"><svg class="icon"><use href="#i-info"/></svg></button>
+    <span class="float-spacer"></span>
+    <span id="status-badge" class="badge">starting…</span>
+    <span id="model-meta" hidden></span>
+  </div>
+
+  <div id="chat-scroll"><div id="chat"></div></div>
+
+  <div id="about-view" hidden>
+    <div class="about-head">
+      <button class="icon-btn" id="btn-about-back" title="Back to the chat"><svg class="icon"><use href="#i-chevron"/></svg></button>
+      <span>About</span>
+    </div>
+    <div class="about-scroll"><div id="about-body"><p class="panel-note">Loading measurements...</p></div></div>
+  </div>
+  <button id="jump-latest"><svg class="icon icon-sm"><use href="#i-send"/></svg>Jump to latest</button>
+
+  <div id="composer-wrap">
+    <div id="composer">
+      <div class="composer-box">
+        <button class="attach-btn" id="btn-attach" title="Attach a text file"><svg class="icon"><use href="#i-paperclip"/></svg></button>
+        <input type="file" id="file-input" hidden multiple
+               accept=".txt,.md,.markdown,.csv,.json,.log,.py,.js,.ts,.html,.css,.yml,.yaml,.xml,.ini,.cfg,.sh,.sql,text/*">
+        <textarea id="prompt" rows="1" placeholder="Send a message…" autocomplete="off"></textarea>
+        <button class="mic-btn" id="btn-expand" title="Expand the box"><svg class="icon"><use href="#i-expand"/></svg></button>
+        <button class="mic-btn" id="btn-mic" title="Dictate" hidden><svg class="icon"><use href="#i-mic"/></svg><span class="mic-bars"><span></span><span></span><span></span><span></span><span></span></span></button>
+        <button class="send-btn" id="btn-send" title="Send (Enter)"><svg class="icon"><use href="#i-send"/></svg></button>
+      </div>
+      <div id="suggest-box" class="suggest-box" hidden></div>
+      <div id="attachments" class="attachments" hidden></div>
+      <div class="composer-hint">
+        <span id="context-usage" class="context-usage" hidden></span>
+        <span id="hint-text">Enter to send · Shift+Enter for a new line</span>
+        <span id="mic-interim" class="mic-interim"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Decorative only: a few cats lying behind the conversation at very low opacity.
+       It never takes a pointer event and it is the first thing the contrast setting
+       turns down, so it cannot get in the way of reading. -->
+  <div id="drawer-backdrop"></div>
+  <div id="base-warning" hidden>
+    <svg class="icon icon-sm"><use href="#i-info"/></svg>
+    <span><b>Base checkpoint loaded.</b> This one was never trained to hold a conversation,
+      so it continues text instead of answering and every reply will look like nonsense.
+      Pick an Instruct checkpoint to chat.</span>
+    <button id="btn-use-instruct">Switch to Instruct</button>
+  </div>
+
+  <div id="scrim"></div>
+
+  <div id="dialog-backdrop" aria-hidden="true">
+    <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="dialog-title" id="dialog-title"></div>
+      <div class="dialog-body" id="dialog-body"></div>
+      <input type="text" class="dialog-input" id="dialog-input" hidden>
+      <div class="dialog-actions">
+        <button id="dialog-cancel">Cancel</button>
+        <button id="dialog-confirm" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="voice-panel" aria-hidden="true">
+    <div class="voice-card" role="dialog" aria-label="Voice input">
+      <div class="voice-title">Listening</div>
+      <div class="voice-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="voice-text" id="voice-text"></div>
+      <div class="voice-status" id="voice-status">Speak, then choose Insert. Esc cancels.</div>
+      <div class="voice-actions">
+        <button id="voice-cancel">Cancel</button>
+        <button id="voice-insert" class="primary">Insert</button>
+      </div>
+    </div>
+  </div>
+
+  <aside id="settings">
+    <div class="settings-dialog" role="dialog" aria-label="Settings">
+      <div class="settings-top">
+        Settings
+        <button class="icon-btn" id="btn-close-settings"><svg class="icon"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="settings-main">
+        <nav class="settings-tabs" id="settings-tabs">
+          <button data-tab="general" class="on"><svg class="icon icon-sm"><use href="#i-palette"/></svg><span>Appearance</span></button>
+          <button data-tab="profile"><svg class="icon icon-sm"><use href="#i-pencil"/></svg><span>Profile</span></button>
+          <button data-tab="model"><svg class="icon icon-sm"><use href="#i-brain"/></svg><span>Model</span></button>
+          <button data-tab="sampling"><svg class="icon icon-sm"><use href="#i-settings"/></svg><span>Generation</span></button>
+          <button data-tab="data"><svg class="icon icon-sm"><use href="#i-archive"/></svg><span>Data controls</span></button>
+        </nav>
+        <div class="settings-panels">
+          <section class="settings-panel" data-panel="general">
+            <h3 class="panel-title">Appearance</h3>
+            <p class="panel-note">A preset sets every colour at once; the pickers below override
+              whichever ones you change. Light and dark keep separate palettes.</p>
+      <div class="field">
+        <label><svg class="icon icon-sm" style="vertical-align:-2px"><use href="#i-palette"/></svg> Theme</label>
+        <select id="set-theme-preset">
+          <option value="custom">Custom</option>
+        </select>
+        <div class="help">A starting point. Changing any colour below switches this to Custom.</div>
+      </div>
+      <div class="field">
+        <label class="row-label"><input type="checkbox" id="set-suggestions"> Show prompt suggestions</label>
+        <div class="help">The panel above the message box offering prompts this model was
+          measured on. The Hide link inside it switches this off.</div>
+      </div>
+      <div class="field">
+        <label>Contrast</label>
+        <select id="set-contrast">
+          <option value="low">Low, softer on the eyes</option>
+          <option value="normal">Normal</option>
+          <option value="high">High, maximum separation</option>
+        </select>
+        <div class="help">Adjusts every surface and the text against it, whichever theme is
+          chosen. It shifts lightness only, so the colours stay as they are.</div>
+      </div>
+      <div class="field">
+        <label>Colours</label>
+        <div class="colour-grid" id="colour-grid"></div>
+        <button class="reset-btn" id="btn-reset-colours" style="margin-top:10px">Reset to the preset</button>
+        <div class="help">Each applies to the mode you are in, so light and dark keep separate palettes.</div>
+      </div>
+          </section>
+
+          <section class="settings-panel" data-panel="profile" hidden>
+            <h3 class="panel-title">Profile</h3>
+            <p class="panel-note">Your name and picture, shown in the sidebar. Stored in this
+              browser only, never uploaded.</p>
+      <div class="field">
+        <label>Your name</label>
+        <input type="text" id="set-profile-name" placeholder="You" maxlength="32">
+        <div class="help">Shown above your messages. Stored in this browser only.</div>
+      </div>
+      <div class="field">
+        <label>Your picture</label>
+        <div class="profile-row">
+          <div class="avatar user" id="profile-preview"></div>
+          <input type="file" id="set-profile-avatar" accept="image/*" hidden>
+          <button class="reset-btn" id="btn-profile-avatar" style="width:auto;padding:8px 14px">Choose…</button>
+          <button class="reset-btn" id="btn-profile-clear" style="width:auto;padding:8px 14px">Remove</button>
+        </div>
+        <div class="help">Scaled to 96px and kept in this browser. It is never uploaded anywhere.</div>
+      </div>
+          </section>
+
+          <section class="settings-panel" data-panel="model" hidden>
+            <h3 class="panel-title">Model</h3>
+            <p class="panel-note">The checkpoint currently loaded.</p>
+      <div class="field">
+        <label>Model details</label>
+        <table class="detail-table" id="model-details"><tbody></tbody></table>
+      </div>
+          </section>
+
+          <section class="settings-panel" data-panel="sampling" hidden>
+            <h3 class="panel-title">Generation</h3>
+            <p class="panel-note">How the next word is chosen. Temperature 0 is deterministic.</p>
+      <div class="field">
+        <label>System prompt</label>
+        <textarea id="set-system" rows="3" placeholder="Sent as a <|system|> turn before the conversation."></textarea>
+        <div class="help">Only takes effect if the tokenizer has a &lt;|system|&gt; token. A small model follows these loosely at best.</div>
+      </div>
+      <div class="field">
+        <label>Temperature <span class="val" id="val-temperature">0.80</span></label>
+        <input type="range" id="set-temperature" min="0" max="1.5" step="0.05">
+        <div class="help">0 is greedy and fully deterministic. Higher is more varied and, on an undertrained model, more incoherent.</div>
+      </div>
+      <div class="field">
+        <label>Top-p <span class="val" id="val-top_p">0.92</span></label>
+        <input type="range" id="set-top_p" min="0.1" max="1" step="0.01">
+        <div class="help">Sample only from the most likely tokens that together hold this much probability. 1.0 disables it.</div>
+      </div>
+      <div class="field">
+        <label>Top-k <span class="val" id="val-top_k">40</span></label>
+        <input type="range" id="set-top_k" min="0" max="200" step="1">
+        <div class="help">Never consider more than this many candidates. 0 disables it.</div>
+      </div>
+      <div class="field">
+        <label>Min-p <span class="val" id="val-min_p">0.05</span></label>
+        <input type="range" id="set-min_p" min="0" max="0.5" step="0.01">
+        <div class="help">Drop tokens far less likely than the best one. Adapts to how confident the model is; often the most useful knob here.</div>
+      </div>
+      <div class="field">
+        <label>Repetition penalty <span class="val" id="val-repetition_penalty">1.10</span></label>
+        <input type="range" id="set-repetition_penalty" min="1" max="1.6" step="0.02">
+        <div class="help">Applied only to the model's own recent output, never to your question or to the stop token.</div>
+      </div>
+      <div class="field">
+        <label>Max new tokens <span class="val" id="val-max_new_tokens">400</span></label>
+        <input type="range" id="set-max_new_tokens" min="32" max="2048" step="32">
+      </div>
+      <div class="field">
+        <label>Seed</label>
+        <input type="number" id="set-seed" placeholder="blank = random each time">
+        <div class="help">Fix this to reproduce a reply exactly.</div>
+      </div>
+            <button class="reset-btn" id="btn-reset-settings">Reset to defaults</button>
+          </section>
+
+          <section class="settings-panel" data-panel="data" hidden>
+            <h3 class="panel-title">Data controls</h3>
+            <p class="panel-note">Every chat lives in a SQLite file next to the server on this
+              machine. Nothing here leaves it.</p>
+            <div class="stat-row">
+              <div class="stat"><b id="stat-active">-</b><span>active chats</span></div>
+              <div class="stat"><b id="stat-archived">-</b><span>archived</span></div>
+              <div class="stat"><b id="stat-messages">-</b><span>messages</span></div>
+            </div>
+            <div class="field">
+              <button class="reset-btn" id="btn-export-chats">Export all chats as JSON</button>
+              <div class="help">Downloads every chat and message, including archived ones.</div>
+            </div>
+            <div class="field">
+              <button class="reset-btn" id="btn-archive-all">Archive all chats</button>
+              <div class="help">Moves every active chat into the archive. Nothing is deleted and
+                any of them can be restored.</div>
+            </div>
+            <div class="field">
+              <button class="reset-btn danger-btn" id="btn-delete-archived">Delete archived chats</button>
+              <div class="help">Permanently removes only what is in the archive.</div>
+            </div>
+            <div class="field">
+              <button class="reset-btn danger-btn" id="btn-delete-all">Delete every chat in this space</button>
+              <div class="help">Permanently removes the chats and messages of the space you are in.
+                Other spaces are untouched. This cannot be undone.</div>
+            </div>
+            <div class="field">
+              <button class="reset-btn" id="btn-reset-browser">Reset this browser's settings</button>
+              <div class="help">Clears the theme, profile and sampling values stored here. Chats are
+                kept: they live in the database, not in the browser.</div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</main>
+</div>
+
+<div id="toast"></div>
+
+<script src="/static/js/config.js"></script>
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/account.js"></script>
+<script src="/static/js/settings-dialog.js"></script>
+<script src="/static/js/about.js"></script>
+<script src="/static/js/voice.js"></script>
+<script src="/static/js/dom.js"></script>
+<script src="/static/js/markdown.js"></script>
+<script src="/static/js/messages.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/sessions.js"></script>
+<script src="/static/js/chat.js"></script>
+<script src="/static/js/settings-panel.js"></script>
+<script src="/static/js/attachments.js"></script>
+<script src="/static/js/suggestions.js"></script>
+<script src="/static/js/dialog.js"></script>
+<script src="/static/js/ui.js"></script>
+<script src="/static/js/main.js"></script>
+</body>
+</html>

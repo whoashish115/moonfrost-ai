@@ -1,0 +1,136 @@
+/* ---------------- model landscape ---------------- */
+.landscape { border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: var(--bg-elevated); }
+.landscape-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+.landscape-bar .spacer { flex: 1; }
+.seg {
+  display: inline-flex; padding: 2px; gap: 2px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--border);
+}
+.seg button {
+  padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: var(--text-muted); transition: background-color .16s, color .16s;
+}
+.seg button.on { background: var(--accent); color: #fff; }
+.seg button:not(.on):hover { color: var(--text); }
+.filter-chip {
+  padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  border: 1px solid var(--border); color: var(--text-muted); background: none;
+  transition: border-color .16s, color .16s, background-color .16s;
+}
+.filter-chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.filter-chip:not(.on):hover { color: var(--text); border-color: var(--text-faint); }
+
+.rank-list { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+.rank-row {
+  display: flex; align-items: center; gap: 9px; padding: 3px 6px; border-radius: 8px;
+  cursor: default; transition: background-color .14s;
+}
+.rank-row:hover { background: var(--hover-surface); }
+.rank-row.ours { background: var(--accent-soft); }
+.rank-name {
+  width: 132px; flex: none; font-size: 12px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
+}
+.rank-row.ours .rank-name { color: var(--accent); font-weight: 700; }
+.rank-track { flex: 1; height: 16px; background: var(--bg-sunken); border-radius: 4px; position: relative; overflow: hidden; }
+.rank-fill { display: block; height: 100%; background: var(--text-faint); border-radius: 4px;
+  transition: width .45s cubic-bezier(.2,.7,.3,1); }
+.rank-row.ours .rank-fill { background: var(--accent); }
+.rank-row.closed .rank-fill { background: var(--text-muted); opacity: .55; }
+.rank-value { width: 52px; flex: none; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text); }
+.rank-tag { width: 34px; flex: none; font-size: 10px; color: var(--text-faint); }
+.rank-chance { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); opacity: .7; }
+.landscape-detail {
+  margin-top: 10px; padding: 9px 11px; border-radius: 9px; background: var(--bg-sunken);
+  font-size: 11.5px; color: var(--text-muted); line-height: 1.55; min-height: 34px;
+}
+@media (max-width: 560px) {
+  .rank-name { width: 92px; font-size: 11px; }
+  .rank-value { width: 44px; }
+  .rank-tag { display: none; }
+  .landscape { padding: 10px; }
+}
+.chart-row { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; font-size: 12px; }
+.chart-label { width: 118px; flex: none; color: var(--text-muted); text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-track { flex: 1; display: block; height: 18px; background: var(--bg-sunken); border-radius: 4px; position: relative; overflow: hidden; }
+/* display:block matters: these are spans, and width/height are ignored on an inline box,
+   so the bars were rendering as zero-size and only the chance marker showed. */
+.chart-track, .chart-fill, .chart-chance { display: block; }
+.chart-track { display: block; }
+.chart-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .5s cubic-bezier(.2,.7,.3,1); }
+.chart-fill.reference { background: var(--text-faint); }
+.chart-chance { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); opacity: .75; }
+.chart-value { width: 46px; flex: none; font-variant-numeric: tabular-nums; color: var(--text); }
+.chart-legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--text-muted); margin: 4px 0 0 128px; }
+.chart-legend span { display: flex; align-items: center; gap: 5px; }
+.chart-key { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* About is a view of its own rather than a settings tab: it holds charts and several
+   screens of prose, which a 760px dialog panel cannot present. */
+#about-view {
+  position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column;
+  background: var(--bg);
+}
+#about-view[hidden] { display: none; }
+.about-head {
+  display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+  border-bottom: 1px solid var(--border); font-size: 16px; font-weight: 650; flex: none;
+}
+.about-head .icon { transform: rotate(180deg); }
+.about-scroll { flex: 1; overflow-y: auto; padding: 22px; }
+.about-scroll #about-body { max-width: 720px; margin: 0 auto; }
+
+.about-link { color: var(--accent); text-decoration: none; }
+.about-link:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .settings-dialog { height: 100%; border-radius: 0; }
+  .settings-tabs { width: 56px; }
+  .settings-tabs button span { display: none; }
+}
+.settings-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 650; }
+.settings-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+.field label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.field .val { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 500; }
+/* .field label is a space-between flex row so the value sits on the right; a checkbox row
+   wants the opposite -- box and words together on the left. */
+.field .row-label { justify-content: flex-start; gap: 8px; cursor: pointer; }
+.field .row-label input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.field .help { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; line-height: 1.45; }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 4px; }
+.detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.detail-table td { padding: 5px 0; vertical-align: top; }
+.detail-table td:first-child { color: var(--text-muted); white-space: nowrap; padding-right: 12px; }
+.detail-table td:last-child { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; word-break: break-all; }
+.detail-table tr + tr td { border-top: 1px solid var(--border); }
+
+
+.colour-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.colour-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.colour-row input[type=color] {
+  width: 30px; height: 26px; padding: 0; border: 1px solid var(--border-strong);
+  border-radius: 6px; background: none; cursor: pointer; flex: none;
+}
+
+.profile-row { display: flex; align-items: center; gap: 10px; }
+.profile-row .avatar { width: 40px; height: 40px; font-size: 15px; }
+.accent-row { display: flex; gap: 10px; }
+.accent-pick { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+.accent-pick input[type=color] {
+  width: 36px; height: 28px; padding: 0; border: 1px solid var(--border-strong);
+  border-radius: 10px; background: none; cursor: pointer;
+}
+
+.field select {
+  width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--bg-elevated); color: var(--text); font-size: 13.5px;
+}
+.field select:focus { border-color: var(--accent); outline: none; }
+.field textarea, .field input[type=number], .field input[type=text] {
+  width: 100%; padding: 8px 10px; border-radius: 14px; border: 1px solid var(--border);
+  background: var(--bg); outline: none; font-size: 13.5px; resize: vertical;
+}
+.field textarea:focus, .field input:focus { border-color: var(--accent); }
+.settings-foot { padding: 12px 16px; border-top: 1px solid var(--border); }
+.reset-btn { width: 100%; padding: 10px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; color: var(--text-muted); }
+.reset-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--bg-sunken); }

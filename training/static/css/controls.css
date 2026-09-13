@@ -1,0 +1,95 @@
+/* ---------------- floating controls over the conversation ---------------- */
+/* No bar: the picker and the reopen button hover in the corner so the conversation owns
+   the whole window. They sit above the scroller and let clicks through everywhere else. */
+.chat-float {
+  position: absolute; top: 10px; left: 12px; right: 12px; z-index: 4;
+  display: flex; align-items: center; gap: 8px; pointer-events: none;
+}
+.chat-float > * { pointer-events: auto; }
+.float-spacer { flex: 1; pointer-events: none; }
+/* Centred on the conversation rather than on whatever space the controls left over. */
+#status-badge {
+  position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+  white-space: nowrap;
+}
+/* It matters while a checkpoint is loading and is noise once it says ready, so it fades
+   out a couple of seconds after settling rather than sitting there permanently. */
+#status-badge { transition: opacity .5s ease; }
+#status-badge.settled { opacity: 0; pointer-events: none; }
+/* One toggle, always in the same corner. Two buttons for one action, each appearing only
+   in one state, was worse than a single control that never moves. */
+.float-menu, .float-btn { display: flex; background: var(--bg-elevated); }
+/* The brand lockup: the four-dot mark plus the name, sitting left of the checkpoint
+   picker so the bar reads "Moonfrost, running this file" rather than starting with a
+   bare filename. The name hides on narrow screens, where the picker needs the room. */
+/* The wordmark opens the project page, so it is a link and is styled like one: a hover
+   surface and a focus ring, not a ripple on something that goes nowhere. */
+.brand {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  padding: 6px 10px; margin: -6px -10px; border-radius: 12px;
+  text-decoration: none; color: inherit; transition: background-color .16s;
+}
+.brand:hover { background: var(--hover-surface); }
+.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The mark is the cat itself rather than a cat inside a disc: at 34px a disc around it
+   left the drawing too small to read. */
+.brand-mark {
+  width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+}
+/* The artwork carries its own colour and its own outline, so it is not tinted. It is
+   wider than it is tall, so height drives the size and width follows. */
+.brand-cat { height: 30px; width: auto; display: block; user-select: none; }
+/* it stirs when you hover the wordmark, and not otherwise */
+.brand:hover .brand-cat { animation: cat-breathe 2.2s ease-in-out infinite; }
+@keyframes cat-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06) rotate(-2deg); }
+}
+@media (prefers-reduced-motion: reduce) { .brand:hover .brand-cat { animation: none; } }
+.brand-name {
+  font-family: "Outfit", var(--font);
+  font-weight: 700; font-size: 19px; letter-spacing: .005em;
+  color: var(--text); white-space: nowrap; line-height: 1;
+}
+/* The name only disappears on a genuinely tiny screen; at 640px it was vanishing on
+   ordinary laptop windows, which left the bar starting with a bare filename. */
+/* the wordmark stays: in the sidebar there is always room for it */
+
+.icon-btn { padding: 8px; border-radius: 50%; color: var(--text-muted); transition: background .12s, color .12s; display: flex; }
+.icon-btn:hover { background: var(--bg-sunken); color: var(--text); }
+.icon-btn.on { background: var(--accent-soft); color: var(--accent); }
+/* Material's select is a text button with an arrow_drop_down triangle, not a boxed field:
+   appearance:none removes the platform chrome, and the triangle is drawn as a background
+   SVG so it inherits the theme rather than the operating system's widget colour. */
+#model-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  padding: 8px 30px 8px 14px; border: none; border-radius: 999px;
+  background-color: var(--bg-elevated);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M7 10l5 5 5-5z' fill='%23888e9c'/></svg>");
+  background-repeat: no-repeat; background-position: right 6px center; background-size: 18px 18px;
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  max-width: 320px; outline: none; cursor: pointer;
+  transition: background-color .14s;
+}
+#model-select:hover { background-color: var(--bg-sunken); }
+#model-select:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+#model-select option { background: var(--bg-elevated); color: var(--text); font-weight: 500; }
+#model-select:focus { border-color: var(--accent); }
+#model-meta { font-size: 12px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spacer { flex: 1; }
+.badge { text-transform: uppercase; letter-spacing: .06em; font-size: 10px; font-weight: 700; }
+/* While a checkpoint is loading the badge shows moving stripes rather than a static word:
+   loading one takes several seconds and a frozen label reads as a hang. */
+.badge.warn {
+  background-image: repeating-linear-gradient(115deg,
+    rgba(255,255,255,.22) 0 10px, transparent 10px 20px);
+  background-size: 200% 100%;
+  animation: badge-stripes 1s linear infinite;
+}
+@keyframes badge-stripes { to { background-position: -40px 0; } }
+@media (prefers-reduced-motion: reduce) { .badge.warn { animation: none; } }
+.badge { font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--bg-sunken); color: var(--text-muted); white-space: nowrap; }
+.badge.warn { background: #fdf0e3; color: #9a5b12; }
+html[data-theme="dark"] .badge.warn { background: #3a2a12; color: #f0b968; }
+.badge.err { background: #fdeaea; color: var(--danger); }
+html[data-theme="dark"] .badge.err { background: #3a1e1c; color: var(--danger); }

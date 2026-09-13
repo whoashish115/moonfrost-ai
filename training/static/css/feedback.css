@@ -1,0 +1,23 @@
+/* ---------------- thinking indicator ---------------- */
+.thinking { display: flex; align-items: center; gap: 9px; color: var(--text-muted); font-size: 13px; }
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%; flex: none;
+  border: 2px solid var(--border-strong); border-top-color: var(--accent);
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* ---------------- ripple ---------------- */
+/* Material's touch ripple, as about fifteen lines of CSS. MUI itself is a React component
+   library and this app is plain JavaScript, so pulling it in would mean rewriting the whole
+   interface; the ripple is the part that actually shows, and it works the same here. */
+/* isolation keeps the ink behind the row's own content without needing a stacking
+   context on every child, and contain:paint clips it without affecting layout. */
+.ripple-host { position: relative; overflow: hidden; isolation: isolate; }
+.ripple-ink {
+  position: absolute; border-radius: 50%; transform: scale(0); pointer-events: none;
+  background: currentColor; opacity: .28; animation: ripple-out .5s ease-out forwards;
+}
+@keyframes ripple-out { to { transform: scale(2.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ripple-ink { animation: none; display: none; } }

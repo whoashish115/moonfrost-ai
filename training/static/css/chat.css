@@ -1,0 +1,129 @@
+/* ---------------- chat ---------------- */
+#chat-scroll {
+  flex: 1; overflow-y: auto; scroll-behavior: smooth;
+  /* the gutter is always reserved, so the column does not shift when a scrollbar
+     appears on the welcome screen and goes again on the first reply */
+  scrollbar-gutter: stable;
+}
+/* Each message rises a few pixels as it lands. Short enough not to delay reading,
+   long enough that a reply reads as arriving rather than blinking into place. */
+.msg { animation: msg-in .22s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .msg { animation: none; } }
+
+/* Jump-to-latest, shown only once the reader has scrolled away from the bottom. */
+#jump-latest {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%) translateY(8px);
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); color: var(--text-muted);
+  font-size: 12.5px; box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease; z-index: 4;
+}
+#jump-latest.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#jump-latest:hover { color: var(--accent); border-color: var(--accent); }
+
+/* The top padding clears the floating picker: without it the first message scrolls
+   underneath the control instead of starting below it. */
+#chat { max-width: 780px; margin: 0 auto; padding: 58px 20px 16px; display: flex; flex-direction: column; gap: 24px; }
+/* One gutter variable drives the avatar column and the indent of everything under it.
+   They were 22px and 29px from an older avatar size, so the text sat left of the name
+   it belonged to. */
+/* A modern assistant layout: what you said sits in a bubble on the right, what the model
+   said runs as plain text across the column. No avatars and no names on either -- with two
+   participants and an obvious alignment, a label on every turn is noise. The avatar lives
+   in the sidebar, where it identifies the account rather than repeating itself. */
+.msg { display: flex; flex-direction: column; gap: 2px; }
+.msg-head .avatar, .msg-head > span { display: none; }
+.msg-head { min-height: 0; margin: 0; }
+
+.msg.user { align-items: flex-end; }
+.msg.user .msg-body {
+  max-width: 78%; padding: 10px 15px; border-radius: 18px 18px 4px 18px;
+  background: var(--bg-sunken); color: var(--text);
+}
+.msg.assistant .msg-body { max-width: 100%; }
+
+
+/* the row actions were inside the head, which is now empty, so they move under the message
+   and only appear when the pointer is over it */
+.msg .msg-actions { opacity: 0; transition: opacity .14s; }
+.msg:hover .msg-actions { opacity: 1; }
+.msg.user .msg-head { justify-content: flex-end; }
+.msg-head { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--text); }
+.avatar {
+  width: 34px; height: 34px; display: grid; place-items: center; flex: none;
+  font-size: 14px; font-weight: 700; color: var(--text-muted);
+}
+.avatar.user {
+  border-radius: 50%; background: var(--bg-sunken); color: var(--text-muted);
+}
+.avatar.user img { border-radius: 50%; width: 100%; height: 100%; object-fit: cover; }
+.msg-actions { display: flex; gap: 1px; opacity: 0; transition: opacity .12s; }
+.msg:hover .msg-actions { opacity: 1; }
+.msg-actions button { padding: 6px; border-radius: 7px; color: var(--text-faint); }
+.msg-actions .icon { width: 17px; height: 17px; }
+.msg-actions button:hover { background: var(--bg-sunken); color: var(--text); }
+.msg-actions button.danger:hover { color: var(--danger); }
+.msg-body { margin-top: 2px; }
+.msg.user .msg-body { white-space: pre-wrap; word-wrap: break-word; }
+.msg-stats { margin-top: 4px; font-size: 11.5px; color: var(--text-faint); }
+.msg.user .msg-stats { text-align: right; }
+
+/* markdown */
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md p { margin: 0 0 12px; }
+.md h1, .md h2, .md h3, .md h4 { margin: 20px 0 10px; line-height: 1.3; font-weight: 650; }
+.md h1 { font-size: 1.4em; } .md h2 { font-size: 1.25em; } .md h3 { font-size: 1.1em; } .md h4 { font-size: 1em; }
+.md ul, .md ol { margin: 0 0 12px; padding-left: 24px; }
+.md li { margin: 3px 0; }
+.md blockquote { margin: 0 0 12px; padding: 2px 0 2px 14px; border-left: 3px solid var(--border-strong); color: var(--text-muted); }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+.md a { color: var(--accent); }
+.md code { font-family: var(--mono); font-size: .875em; background: var(--bg-sunken); padding: .15em .35em; border-radius: 4px; }
+.md table { border-collapse: collapse; margin: 0 0 12px; display: block; overflow-x: auto; max-width: 100%; }
+.md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.md th { background: var(--bg-sunken); font-weight: 600; }
+.code-block { position: relative; margin: 0 0 12px; border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+.code-block-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; font-size: 11.5px; color: #9096a4; border-bottom: 1px solid rgba(255,255,255,.07); }
+.code-block-head button { color: #9096a4; padding: 2px 6px; border-radius: 4px; font-size: 11.5px; display: flex; align-items: center; gap: 4px; }
+.code-block-head button:hover { color: #fff; background: rgba(255,255,255,.1); }
+.code-block pre { margin: 0; padding: 12px; overflow-x: auto; }
+.code-block code { font-family: var(--mono); font-size: 12.8px; line-height: 1.55; background: none; padding: 0; color: var(--code-text); white-space: pre; }
+/* One palette for every language. The code surface is dark in both themes, which is why
+   these are fixed colours rather than theme tokens. */
+.tok-key { color: #c792ea; }
+.tok-str { color: #c3e88d; }
+.tok-com { color: #6b7385; font-style: italic; }
+.tok-num { color: #f78c6c; }
+.tok-fun { color: #82aaff; }
+.tok-typ { color: #ffcb6b; }
+.code-block-head .lang-tag { text-transform: lowercase; letter-spacing: .02em; }
+
+.caret { display: inline-block; width: 7px; height: 1.05em; background: var(--accent); vertical-align: text-bottom; animation: blink 1.1s steps(2, start) infinite; border-radius: 1px; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.suggestions { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; max-width: 520px; margin: 0 auto; }
+.suggestion { text-align: left; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elevated); font-size: 13.5px; transition: border-color .12s, transform .12s; }
+.suggestion:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+/* ---------------- empty state ---------------- */
+#empty-state {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 40px 24px; text-align: center;
+  animation: rise .45s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #empty-state { animation: none; } }
+/* No disc, no gradient, no ring: just the cat on the page. */
+.empty-mark { display: grid; place-items: center; }
+.empty-title { font-size: 25px; font-weight: 680; letter-spacing: -.02em; }
+.empty-sub { color: var(--text-muted); font-size: 14px; max-width: 460px; line-height: 1.6; }
+.empty-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 560px; margin-top: 4px; }
+.empty-chip {
+  padding: 10px 18px; border-radius: 999px; border: 1px solid transparent;
+  background: var(--bg-sunken); font-size: 13px; color: var(--text-muted);
+  transition: all .15s;
+}
+.empty-chip:hover { color: var(--text); background: var(--border); }
+.empty-note { font-size: 11.5px; color: var(--text-faint); max-width: 430px; line-height: 1.5; }

@@ -1,0 +1,25 @@
+/* ---------------- the mark, and the loader it becomes ---------------- */
+/* While a reply streams the cat dozes: the mark itself becomes the loader rather than a
+   separate spinner appearing beside it. */
+.avatar img { display: block; }
+/* The artwork is wider than it is tall, so height drives the size and width follows;
+   forcing a square would letterbox it or crop the tail. */
+.logo-cat { height: 100%; width: auto; object-fit: contain; display: block; }
+.avatar .logo-cat { height: 32px; }
+.empty-mark .logo-cat { height: 92px; }
+.avatar.loading .logo-cat { animation: cat-doze 1.6s ease-in-out infinite; }
+@keyframes cat-doze {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.07); opacity: .7; }
+}
+@media (prefers-reduced-motion: reduce) { .avatar.loading .logo-cat { animation: none; } }
+.composer-hint { display: flex; align-items: center; gap: 10px; padding: 7px 4px 0; font-size: 11.5px; color: var(--text-faint); flex-wrap: wrap; }
+.toggle-chip { display: flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; border: 1px solid var(--border); font-size: 11.5px; transition: all .12s; }
+.context-usage { font-size: 11.5px; padding: 3px 9px; border-radius: 20px; background: var(--bg-sunken); color: var(--text-muted); white-space: nowrap; }
+.context-usage.warn { background: #fdf0e3; color: #9a5b12; }
+html[data-theme="dark"] .context-usage.warn { background: #3a2a12; color: #f0b968; }
+.context-usage.full { background: #fdeaea; color: var(--danger); }
+html[data-theme="dark"] .context-usage.full { background: #3a1e1c; color: var(--danger); }
+.toggle-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.toggle-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+#btn-archive-view.on { background: var(--accent-soft); color: var(--accent); }

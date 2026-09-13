@@ -1,0 +1,64 @@
+/* ---------------- composer ---------------- */
+#composer-wrap { flex: none; padding: 0 20px 16px; }
+#composer { max-width: 780px; margin: 0 auto; }
+.composer-box {
+  /* even padding: the 16px left inset was sized for a bare text field and left the
+     attach button floating away from the edge once it was added */
+  display: flex; align-items: flex-end; gap: 6px; padding: 8px;
+  background: var(--bg-sunken); border: 1px solid transparent;
+  border-radius: 24px; box-shadow: var(--shadow); transition: border-color .15s;
+}
+.composer-box:focus-within { border-color: var(--accent); background: var(--bg-elevated); }
+#prompt {
+  flex: 1; border: none; outline: none; background: none; resize: none;
+  max-height: 200px; padding: 7px 0; line-height: 1.55; font-size: 15px;
+  transition: max-height .22s cubic-bezier(.2,.7,.3,1);
+}
+/* Expanded, the box takes half the window so a long message can be read while writing
+   it. The transition is on max-height rather than height because the textarea still
+   sizes itself to its content. */
+.composer-box.expanded #prompt { max-height: 50vh; }
+.composer-box.expanded { align-items: flex-start; }
+.composer-box.expanded .send-btn,
+.composer-box.expanded .mic-btn,
+.composer-box.expanded .attach-btn { align-self: flex-end; }
+@media (prefers-reduced-motion: reduce) { #prompt { transition: none; } }
+
+.suggest-head button.suggest-hide {
+  margin-left: 10px; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--text-faint); text-decoration: underline;
+}
+.suggest-head button.suggest-hide:hover { color: var(--text); }
+#prompt::placeholder { color: var(--text-faint); }
+.send-btn { width: 38px; height: 38px; border-radius: 50%; background: var(--accent-gradient); color: var(--on-accent); display: grid; place-items: center; flex: none; transition: background .15s; }
+.send-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.send-btn.stop { background: var(--danger); }
+.mic-btn {
+  width: 36px; height: 36px; border-radius: 8px; flex: none;
+  display: grid; place-items: center; color: var(--text-muted);
+  border: 1px solid var(--border); transition: all .15s;
+}
+.mic-btn:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-sunken); }
+.mic-btn.listening { background: var(--danger); border-color: var(--danger); color: #fff; animation: mic-pulse 1.6s ease-out infinite; }
+.mic-btn.listening .icon { display: none; }
+@keyframes mic-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(208,69,59,.5), 0 0 0 0 rgba(208,69,59,.3); }
+  70%  { box-shadow: 0 0 0 9px rgba(208,69,59,0), 0 0 0 16px rgba(208,69,59,0); }
+  100% { box-shadow: 0 0 0 0 rgba(208,69,59,0), 0 0 0 0 rgba(208,69,59,0); }
+}
+/* Five bars bouncing on staggered delays: it reads as "listening" instantly, and unlike a
+   real level meter it needs no access to the audio stream. */
+.mic-bars { display: none; align-items: center; gap: 2px; height: 16px; }
+.mic-btn.listening .mic-bars { display: flex; }
+.mic-bars span { width: 2px; border-radius: 2px; background: currentColor; animation: mic-bar .9s ease-in-out infinite; }
+.mic-bars span:nth-child(1) { height: 5px;  animation-delay: 0s; }
+.mic-bars span:nth-child(2) { height: 10px; animation-delay: .12s; }
+.mic-bars span:nth-child(3) { height: 14px; animation-delay: .24s; }
+.mic-bars span:nth-child(4) { height: 9px;  animation-delay: .36s; }
+.mic-bars span:nth-child(5) { height: 6px;  animation-delay: .48s; }
+@keyframes mic-bar { 0%,100% { transform: scaleY(.4); } 50% { transform: scaleY(1.5); } }
+@media (prefers-reduced-motion: reduce) {
+  .mic-btn.listening { animation: none; }
+  .mic-bars span { animation: none; }
+}
+.mic-interim { color: var(--accent); font-style: italic; }
