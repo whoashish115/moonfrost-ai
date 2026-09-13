@@ -1,0 +1,4 @@
+{
+  "comment": "Drop cropped transparent PNGs here and list their filenames. The chat background renders whatever is listed; an empty list renders nothing.",
+  "background": []
+}
