@@ -1,0 +1,101 @@
+{
+  "checkpoint": "HuggingFaceTB/SmolLM2-135M",
+  "step": 0,
+  "best_val_loss": null,
+  "total_parameters": 134515008,
+  "active_parameters": 134515008,
+  "device": "NVIDIA GeForce RTX 3050",
+  "measured_at": "2026-09-13 10:48:16",
+  "benchmarks": {
+    "ARC-Easy|0-shot": {
+      "accuracy": 0.57,
+      "accuracy_length_normalised": 0.535,
+      "examples": 200,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "ARC-Easy|5-shot": {
+      "accuracy": 0.625,
+      "accuracy_length_normalised": 0.62,
+      "examples": 200,
+      "shots": 5,
+      "chance": 0.25
+    },
+    "ARC-Challenge|0-shot": {
+      "accuracy": 0.24,
+      "accuracy_length_normalised": 0.285,
+      "examples": 200,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "ARC-Challenge|5-shot": {
+      "accuracy": 0.26,
+      "accuracy_length_normalised": 0.27,
+      "examples": 200,
+      "shots": 5,
+      "chance": 0.25
+    },
+    "PIQA|0-shot": {
+      "error": "RuntimeError: Dataset scripts are no longer supported, but found piqa.py"
+    },
+    "PIQA|5-shot": {
+      "error": "RuntimeError: Dataset scripts are no longer supported, but found piqa.py"
+    },
+    "HellaSwag|0-shot": {
+      "accuracy": 0.405,
+      "accuracy_length_normalised": 0.395,
+      "examples": 200,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "HellaSwag|5-shot": {
+      "accuracy": 0.4,
+      "accuracy_length_normalised": 0.395,
+      "examples": 200,
+      "shots": 5,
+      "chance": 0.25
+    },
+    "WinoGrande|0-shot": {
+      "accuracy": 0.55,
+      "accuracy_length_normalised": 0.555,
+      "examples": 200,
+      "shots": 0,
+      "chance": 0.5
+    },
+    "WinoGrande|5-shot": {
+      "accuracy": 0.545,
+      "accuracy_length_normalised": 0.54,
+      "examples": 200,
+      "shots": 5,
+      "chance": 0.5
+    },
+    "BoolQ|0-shot": {
+      "accuracy": 0.615,
+      "accuracy_length_normalised": 0.615,
+      "examples": 200,
+      "shots": 0,
+      "chance": 0.5
+    },
+    "BoolQ|5-shot": {
+      "accuracy": 0.42,
+      "accuracy_length_normalised": 0.42,
+      "examples": 200,
+      "shots": 5,
+      "chance": 0.5
+    },
+    "MMLU|0-shot": {
+      "accuracy": 0.324,
+      "accuracy_length_normalised": 0.288,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "MMLU|5-shot": {
+      "accuracy": 0.32,
+      "accuracy_length_normalised": 0.324,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.25
+    }
+  }
+}
