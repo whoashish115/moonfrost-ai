@@ -1,0 +1,176 @@
+{
+  "architecture": {
+    "total_parameters": 777000000,
+    "active_parameters_per_token": 161000000,
+    "layers": 14,
+    "dense_layers": 1,
+    "moe_layers": 13,
+    "hidden_size": 896,
+    "attention_heads": 14,
+    "attention": "multi-head latent attention",
+    "kv_compressed_latent_dim": 320,
+    "query_compressed_latent_dim": 512,
+    "routed_experts": 32,
+    "experts_per_token": 3,
+    "shared_experts": 1,
+    "context_length": 1024,
+    "vocabulary_size": 32768,
+    "tokenizer": "byte-level BPE, trained from scratch",
+    "precision": "bfloat16 autocast, float32 master weights",
+    "optimizer": "AdamW",
+    "schedule": "time-based cosine with warmup",
+    "micro_batch": 24,
+    "gradient_accumulation": 12,
+    "tokens_per_step": 294912,
+    "gpu": "1x H100 80GB (rented)"
+  },
+  "stages": {
+    "pretrain-phase1": {
+      "steps": 9540,
+      "minutes": 227.0,
+      "tokens_processed": 2813460480,
+      "median_tokens_per_second": 183076,
+      "final_train_loss": 3.0841,
+      "best_val_loss": 3.1486,
+      "final_val_loss": 3.1571,
+      "coverage": "tail only, steps 9160-9542 recovered from Modal",
+      "outcome": "completed, best val loss 3.1486 at step 9,500"
+    },
+    "pretrain-phase2": {
+      "steps": 3760,
+      "minutes": 105.2,
+      "tokens_processed": 1108869120,
+      "median_tokens_per_second": 183393,
+      "final_train_loss": 3.0442,
+      "best_val_loss": 3.0381,
+      "final_val_loss": 3.0381,
+      "coverage": "first 105 minutes, the rest lost with the volume",
+      "outcome": "completed, best val loss 2.976 at step 11,000"
+    },
+    "sft": {
+      "steps": 9200,
+      "minutes": 80.0,
+      "tokens_processed": 2713190400,
+      "median_tokens_per_second": 178713,
+      "final_train_loss": 1.0409,
+      "best_val_loss": 1.2484,
+      "final_val_loss": 1.3241,
+      "coverage": "complete",
+      "outcome": "completed, best val loss 1.2484 at step 7,800"
+    }
+  },
+  "evaluation": {
+    "checkpoint": "moonfrost-777m-instruct-v2.pt",
+    "step": 7800,
+    "best_val_loss": 1.248351812362671,
+    "total_parameters": 777125888,
+    "active_parameters": 160993280,
+    "device": "NVIDIA GeForce RTX 3050",
+    "measured_at": "2026-09-13 09:48:52",
+    "pretraining_eval": {
+      "loss": 3.944224766890208,
+      "perplexity": 51.636292428185335,
+      "batches": 60,
+      "block_size": 1024
+    },
+    "inference": {
+      "tokens": 80,
+      "seconds": 4.773585557937622,
+      "tokens_per_second": 16.75889099064628,
+      "time_to_first_token_seconds": 0.05469965934753418,
+      "device": "cuda"
+    },
+    "benchmarks": {
+      "ARC-Easy|0-shot": {
+        "accuracy": 0.49,
+        "accuracy_length_normalised": 0.42,
+        "examples": 200,
+        "shots": 0,
+        "chance": 0.25
+      },
+      "ARC-Easy|5-shot": {
+        "accuracy": 0.515,
+        "accuracy_length_normalised": 0.49,
+        "examples": 200,
+        "shots": 5,
+        "chance": 0.25
+      },
+      "ARC-Challenge|0-shot": {
+        "accuracy": 0.285,
+        "accuracy_length_normalised": 0.28,
+        "examples": 200,
+        "shots": 0,
+        "chance": 0.25
+      },
+      "ARC-Challenge|5-shot": {
+        "accuracy": 0.255,
+        "accuracy_length_normalised": 0.28,
+        "examples": 200,
+        "shots": 5,
+        "chance": 0.25
+      },
+      "PIQA|0-shot": {
+        "error": "RuntimeError: Dataset scripts are no longer supported, but found piqa.py"
+      },
+      "PIQA|5-shot": {
+        "error": "RuntimeError: Dataset scripts are no longer supported, but found piqa.py"
+      },
+      "HellaSwag|0-shot": {
+        "accuracy": 0.38,
+        "accuracy_length_normalised": 0.365,
+        "examples": 200,
+        "shots": 0,
+        "chance": 0.25
+      },
+      "HellaSwag|5-shot": {
+        "accuracy": 0.395,
+        "accuracy_length_normalised": 0.34,
+        "examples": 200,
+        "shots": 5,
+        "chance": 0.25
+      },
+      "WinoGrande|0-shot": {
+        "accuracy": 0.565,
+        "accuracy_length_normalised": 0.555,
+        "examples": 200,
+        "shots": 0,
+        "chance": 0.5
+      },
+      "WinoGrande|5-shot": {
+        "accuracy": 0.53,
+        "accuracy_length_normalised": 0.56,
+        "examples": 200,
+        "shots": 5,
+        "chance": 0.5
+      },
+      "BoolQ|0-shot": {
+        "accuracy": 0.415,
+        "accuracy_length_normalised": 0.415,
+        "examples": 200,
+        "shots": 0,
+        "chance": 0.5
+      },
+      "BoolQ|5-shot": {
+        "accuracy": 0.445,
+        "accuracy_length_normalised": 0.445,
+        "examples": 200,
+        "shots": 5,
+        "chance": 0.5
+      },
+      "MMLU|0-shot": {
+        "accuracy": 0.28,
+        "accuracy_length_normalised": 0.272,
+        "examples": 250,
+        "shots": 0,
+        "chance": 0.25
+      },
+      "MMLU|5-shot": {
+        "accuracy": 0.276,
+        "accuracy_length_normalised": 0.308,
+        "examples": 250,
+        "shots": 5,
+        "chance": 0.25
+      }
+    }
+  }
+}
