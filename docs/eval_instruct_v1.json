@@ -1,0 +1,109 @@
+{
+  "checkpoint": "moonfrost-777m-instruct-v1.pt",
+  "step": 1805,
+  "best_val_loss": 1.3251298666000366,
+  "total_parameters": 777125888,
+  "active_parameters": 160993280,
+  "device": "NVIDIA GeForce RTX 3050",
+  "measured_at": "2026-09-14 05:44:41",
+  "pretraining_eval": null,
+  "inference": {
+    "tokens": 80,
+    "seconds": 4.954500675201416,
+    "tokens_per_second": 16.14693492735224,
+    "time_to_first_token_seconds": 0.04650306701660156,
+    "device": "cuda"
+  },
+  "benchmarks": {
+    "ARC-Easy|0-shot": {
+      "accuracy": 0.472,
+      "accuracy_length_normalised": 0.444,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "ARC-Easy|5-shot": {
+      "accuracy": 0.524,
+      "accuracy_length_normalised": 0.512,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.25
+    },
+    "ARC-Challenge|0-shot": {
+      "accuracy": 0.22,
+      "accuracy_length_normalised": 0.26,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "ARC-Challenge|5-shot": {
+      "accuracy": 0.228,
+      "accuracy_length_normalised": 0.244,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.25
+    },
+    "PIQA|0-shot": {
+      "error": "RuntimeError: Dataset scripts are no longer supported, but found piqa.py"
+    },
+    "PIQA|5-shot": {
+      "error": "RuntimeError: Dataset scripts are no longer supported, but found piqa.py"
+    },
+    "HellaSwag|0-shot": {
+      "accuracy": 0.392,
+      "accuracy_length_normalised": 0.356,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "HellaSwag|5-shot": {
+      "accuracy": 0.384,
+      "accuracy_length_normalised": 0.368,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.25
+    },
+    "WinoGrande|0-shot": {
+      "accuracy": 0.532,
+      "accuracy_length_normalised": 0.56,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.5
+    },
+    "WinoGrande|5-shot": {
+      "accuracy": 0.496,
+      "accuracy_length_normalised": 0.532,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.5
+    },
+    "BoolQ|0-shot": {
+      "accuracy": 0.536,
+      "accuracy_length_normalised": 0.536,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.5
+    },
+    "BoolQ|5-shot": {
+      "accuracy": 0.612,
+      "accuracy_length_normalised": 0.612,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.5
+    },
+    "MMLU|0-shot": {
+      "accuracy": 0.288,
+      "accuracy_length_normalised": 0.28,
+      "examples": 250,
+      "shots": 0,
+      "chance": 0.25
+    },
+    "MMLU|5-shot": {
+      "accuracy": 0.28,
+      "accuracy_length_normalised": 0.3,
+      "examples": 250,
+      "shots": 5,
+      "chance": 0.25
+    }
+  }
+}
