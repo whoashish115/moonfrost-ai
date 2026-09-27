@@ -73,3 +73,35 @@ early training, and one dense layer costs little.
   Doing it in bfloat16 lost enough precision at long positions to matter
 - **Tied embeddings**: the input embedding and output projection are one 32,768 x 896
   matrix, saving 29M parameters
+
+## Tokenizer
+
+Byte-level BPE, **32,768 tokens**, trained from scratch on 1.5GB of the same FineWeb-Edu
+text. A 65k vocabulary would have spent about 18% of every step in the output layer
+alone.
+
+Special tokens: `<|endoftext|>`, `<|pad|>`, `<|system|>`, `<|user|>`, `<|assistant|>`,
+plus four reserved for images that are unused.
+
+## Chat format
+
+```
+<|system|>You are Moonfrost...<|user|>Why is the sky blue?<|assistant|>Because...<|endoftext|>
+```
+
+Loss is masked on system and user turns, so the model only learns to produce assistant
+text: **60.7% of packed positions are supervised**. Both `<|endoftext|>` and `<|user|>`
+stop generation, because an undertrained model will otherwise write the next user turn
+itself.
+
+## Where the parameters are
+
+| Component | Parameters | Share |
+|---|---|---|
+| Routed experts (13 layers x 32) | 543M | 70% |
+| Embedding (tied) | 29M | 4% |
+| Attention (14 layers) | 118M | 15% |
+| Shared experts + dense layer | 84M | 11% |
+
+Seventy per cent of the model is experts that are mostly idle for any given token. That
+is the trade: the capacity of a 777M model at roughly the compute of a 161M one.
