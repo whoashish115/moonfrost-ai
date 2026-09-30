@@ -106,18 +106,11 @@ parameters is roughly eight tokens per parameter, against a compute-optimal rati
 twenty and against reference models trained on two to eighteen trillion tokens at half the
 size. The training budget produced conversational behaviour rather than knowledge.
 
-Read the three Moonfrost columns down each row. Almost every difference between them is
-noise: at 250 examples the 95% interval on a single score is roughly **±6 points**, and
-fifteen of the eighteen gaps are under three. One benchmark moves, and it moves in one
-direction. **ARC-Easy falls 54.8, 52.4, 44.4** across the base, the half-epoch tune and the
-1.7-epoch tune. Ten points is what it costs to teach the model to answer in a chat format
-instead of continuing a multiple-choice stem, and the cost grows with how long you tune.
-
-The harness draws its five in-context examples from the rows just past the evaluation
-slice, so the sample size also fixes the prompt. An earlier run of the instruct weights
-over 200 examples scored 44.5 on BoolQ and the run over 250 scored 58.8, on the same
-weights and the same harness. That is the reason every model here was scored rather than
-quoted.
+Almost every difference between the three Moonfrost columns is inside the noise; the one
+that is not is **ARC-Easy, falling 54.8, 52.4, 44.4** across the base and the two tunes,
+which is what chat formatting costs on a multiple-choice stem. The noise floor, the
+sensitivity of these scores to the five-shot prompt, and the per-benchmark zero-shot
+figures are in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Training
 
