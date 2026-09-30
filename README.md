@@ -240,9 +240,10 @@ Hugging Face `tokenizers` and `transformers`, FastAPI and Modal.
 ## Citation
 
 ```bibtex
-@misc{moonfrost2026,
-  title  = {Moonfrost: a 777M-parameter Mixture-of-Experts language model trained from scratch},
-  author = {Ashish Kumar},
+@misc{kumar2026moonfrost,
+  title  = {Moonfrost: A 777M Mixture-of-Experts Language Model
+            Trained From Scratch},
+  author = {Kumar, Ashish},
   year   = {2026},
   url    = {https://github.com/whoashish115/moonfrost-ai}
 }
